@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="568" viewBox="0 0 1120 568" role="img" aria-labelledby="title desc">
-<title id="title">IntentOS. Give agents a workflow. Not the keys.</title>
-<desc id="desc">An open-source transaction runtime for AI agents. Models propose. IntentOS enforces.</desc>
+<title id="title">IntentOS. Let AI help. You stay in control.</title>
+<desc id="desc">Free software that helps people stay in control of what AI does.</desc>
 <defs>
   <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#17152f"/><stop offset="1" stop-color="#090b19"/></linearGradient>
   <linearGradient id="m" x2="1" y2=".6"><stop stop-color="#b097ff"/><stop offset=".6" stop-color="#a2ceff"/><stop offset="1" stop-color="#75f5cf"/></linearGradient>
@@ -19,12 +19,12 @@
   <rect width="50" height="50" rx="13" fill="#c2afff"/><path d="M25 9l14 8v16l-14 8-14-8V17z" fill="none" stroke="#17152f" stroke-width="2.5"/><path d="m18 25 5 5 9-11" fill="none" stroke="#17152f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="65" y="36" fill="#f7f3ff" font-size="37" font-weight="700" letter-spacing="-1">IntentOS</text>
  </g>
- <text x="55" y="157" fill="#cfbfff" font-family="monospace" font-size="22" font-weight="700" letter-spacing="2">OPEN-SOURCE AGENT RUNTIME</text>
- <text x="49" y="247" fill="#f7f4ff" font-weight="800" font-size="72" letter-spacing="-2">Give agents</text>
- <text x="49" y="323" fill="#f7f4ff" font-weight="800" font-size="72" letter-spacing="-2">a workflow.</text>
- <text x="49" y="407" fill="url(#m)" font-weight="800" font-size="76" letter-spacing="-3">Not the keys.</text>
- <text x="56" y="477" fill="#d2d8ec" font-size="29">Models propose. IntentOS enforces.</text>
- <text x="55" y="554" fill="#b9b7d4" font-size="17" font-family="monospace" letter-spacing="1">OFFLINE MVP  /  NODE 24+  /  MIT</text>
+ <text x="55" y="157" fill="#cfbfff" font-family="monospace" font-size="22" font-weight="700" letter-spacing="2">FREE, OPEN-SOURCE SOFTWARE</text>
+ <text x="49" y="247" fill="#f7f4ff" font-weight="800" font-size="72" letter-spacing="-2">Let AI help.</text>
+ <text x="49" y="323" fill="#f7f4ff" font-weight="800" font-size="72" letter-spacing="-2">You stay</text>
+ <text x="49" y="407" fill="url(#m)" font-weight="800" font-size="76" letter-spacing="-3">in control.</text>
+ <text x="56" y="477" fill="#d2d8ec" font-size="29">Approve the plan. See what happened.</text>
+ <text x="55" y="554" fill="#b9b7d4" font-size="17" font-family="monospace" letter-spacing="1">EARLY DEMO  /  NO ACCOUNT REQUIRED</text>
 </g>
 <!-- Visual metaphor: proposals cross a gate and leave as a verified receipt. -->
 <g transform="translate(841 272)">

@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="405" viewBox="0 0 1120 405" role="img" aria-labelledby="title desc">
 <title id="title">“Done” is not proof.</title>
-<desc id="desc">Without a runtime, an agent can say done without checking the result. IntentOS binds approval, checks the budget, and verifies service evidence in its offline demo.</desc>
+<desc id="desc">AI can say done without checking. IntentOS checks that you approved the action, it was within budget, and it actually happened.</desc>
 <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#151629"/><stop offset="1" stop-color="#0b101d"/></linearGradient></defs>
 <rect width="1120" height="405" rx="28" fill="url(#bg)"/>
 <g font-family="Arial, Helvetica, sans-serif">
  <text x="54" y="75" fill="#fff" font-size="49" font-weight="800">“Done” is not proof.</text>
  <rect x="52" y="115" width="468" height="236" rx="20" fill="#211b2e" stroke="#77617e" stroke-width="2"/>
  <rect x="600" y="115" width="468" height="236" rx="20" fill="#152930" stroke="#55aa9b" stroke-width="2"/>
- <text x="82" y="165" fill="#efb9c1" font-size="23" font-weight="700" letter-spacing="2">AGENT CLAIM</text>
+ <text x="82" y="165" fill="#efb9c1" font-size="23" font-weight="700" letter-spacing="2">AI SAYS</text>
  <text x="82" y="242" fill="#fff2f6" font-size="60" font-weight="800">“Done.”</text>
  <text x="82" y="302" fill="#e6c5d0" font-size="29">But what actually changed?</text>
- <text x="631" y="165" fill="#a1f8de" font-size="23" font-weight="700" letter-spacing="2">INTENTOS RECEIPT</text>
- <g fill="#effffa" font-size="31" font-weight="700"><text x="666" y="220">Exact proposal approved</text><text x="666" y="267">Within the budget</text><text x="666" y="314">Service record verified</text></g>
+ <text x="631" y="165" fill="#a1f8de" font-size="23" font-weight="700" letter-spacing="2">INTENTOS CHECKS</text>
+ <g fill="#effffa" font-size="31" font-weight="700"><text x="666" y="220">You approved it</text><text x="666" y="267">It stayed within budget</text><text x="666" y="314">It actually happened</text></g>
  <g stroke="#84f6d5" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m633 207 6 6 12-13m-18 54 6 6 12-13m-18 54 6 6 12-13"/></g>
  <path d="M537 235h45m-13-13 13 13-13 13" stroke="#beabff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
- <text x="56" y="382" font-family="monospace" font-size="15" fill="#b6b7cf" letter-spacing="2">ILLUSTRATION OF THE OFFLINE DEMO</text>
+ <text x="56" y="382" font-family="monospace" font-size="15" fill="#b6b7cf" letter-spacing="2">WHAT THE DEMO CHECKS</text>
 </g>
 </svg>
