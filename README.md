@@ -1,27 +1,33 @@
 # IntentOS
 
-![IntentOS: a transaction runtime for AI agents. Propose, approve, execute, verify.](docs/assets/intent-flow.svg)
+![IntentOS. Give agents a workflow, not the keys. Models propose. IntentOS enforces.](docs/assets/product-hero.svg)
 
-**Let AI agents propose changes without giving them the keys.**
+[![Try the offline demo](docs/assets/try-demo.svg)](#try-it)
 
-IntentOS is an open-source transaction runtime for agent workflows. It separates **what a model suggests** from **what your software is allowed to do**. Approve the exact proposal, enforce a budget before acting, and verify what actually happened instead of taking the model's word for it.
+**Open source. Runs locally. No API key required.**
 
-**Offline MVP · TypeScript · Node 24+ · SQLite · MIT**
+[Try it](#try-it) · [Watch it work](#watch-it-work) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
 
-[Try it](#try-it) · [See the demo](#see-the-demo) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+![“Done” is not proof. An agent claim alone does not tell you what changed; the IntentOS demo checks exact approval, budget, and the service record.](docs/assets/from-promise-to-proof.svg)
 
-## Why IntentOS?
+IntentOS separates **what a model suggests** from **what your software is allowed to do**. Approve the exact proposal, enforce a budget before acting, and verify what actually happened.
 
-A model can say “done” even if a service never made the change. A human can approve one proposal and the next model call can generate a different one. And if a process dies after a write, replaying it can repeat the effect. IntentOS makes those decisions the runtime's job, not the model's.
+## Watch it work
 
-| What you want | What the MVP demonstrates |
-| --- | --- |
-| **Control what runs** | Separate planner, approver, executor, and verifier roles. Approval is tied to the exact action, payload, cost, and policy version. |
-| **Stay within a cap** | The runtime checks and charges a fixed cost against a persistent pool of simulated credits before it dispatches the write. |
-| **Recover after a crash** | The simulator recognizes the same operation on retry. The included tests kill the process before and after the write and check that recovery doesn't duplicate the effect or charge. |
-| **Know it really happened** | The verifier reads the service's own record. A durable audit trail records the decisions; executor output alone can't mark an action verified. |
+![Animated capture of a real offline run: proposal pending, early execution blocked, service record verified after approval, and a retry leaves the same 3 of 12 simulated credits spent.](docs/assets/demo-reel.gif)
 
-IntentOS is for developers who want predictable action handling without committing to a model provider. The demo uses an offline planner. OpenAI and Anthropic proposal adapters are included and tested with mocked HTTP; they are not needed to run it.
+*Real offline CLI output. Simulated credits. No live service or payments.*
+
+<details>
+<summary>See the two static terminal captures</summary>
+
+![Exact approval gate: a pending proposal fails to execute until the operator supplies the proposal digest.](docs/assets/approval.png)
+
+![Independent verification and replay: state is verified, evidence matches, and total spend remains 3 of 12.](docs/assets/verification.png)
+
+The terminal screenshots abbreviate `node src/cli.ts` as `intentos` and use one shared state directory.
+
+</details>
 
 ## Try it
 
@@ -35,17 +41,16 @@ npm test
 
 The demo's built-in approval is for a harmless, fixed fixture. Use the manual flow below to approve a proposal yourself. Local demo state lives in `.intentos/`, which is ignored by Git.
 
-## See the demo
+## What the MVP does
 
-**1. An agent can propose a write, but the runtime won't execute it without exact approval.**
+| What you want | What the MVP demonstrates |
+| --- | --- |
+| **Control what runs** | Separate planner, approver, executor, and verifier roles. Approval is tied to the exact action, payload, cost, and policy version. |
+| **Stay within a cap** | The runtime checks and charges a fixed cost against a persistent pool of simulated credits before it dispatches the write. |
+| **Recover after a crash** | The simulator recognizes the same operation on retry. The included tests kill the process before and after the write and check that recovery doesn't duplicate the effect or charge. |
+| **Know it really happened** | The verifier reads the service's own record. A durable audit trail records the decisions; executor output alone can't mark an action verified. |
 
-![Terminal capture: the proposal is pending, execution fails with “Exact approval required”, then digest approval succeeds.](docs/assets/approval.png)
-
-**2. A verifier checks the service record. Replay leaves the budget at 3 of 12 simulated credits.**
-
-![Terminal capture: execution is applied, verification reports matched true, and replay leaves spending at 3 of 12 with auditValid true.](docs/assets/verification.png)
-
-These styled captures show excerpts from a real local run. In the screenshots, `intentos` abbreviates `node src/cli.ts` with a common state directory.
+IntentOS is for developers who want predictable action handling without committing to a model provider. The demo uses an offline planner. OpenAI and Anthropic proposal adapters are included and tested with mocked HTTP; they are not needed to run it.
 
 ## Approve a proposal yourself
 

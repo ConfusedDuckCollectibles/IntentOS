@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="568" viewBox="0 0 1120 568" role="img" aria-labelledby="title desc">
+<title id="title">IntentOS. Give agents a workflow. Not the keys.</title>
+<desc id="desc">An open-source transaction runtime for AI agents. Models propose. IntentOS enforces.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#17152f"/><stop offset="1" stop-color="#090b19"/></linearGradient>
+  <linearGradient id="m" x2="1" y2=".6"><stop stop-color="#b097ff"/><stop offset=".6" stop-color="#a2ceff"/><stop offset="1" stop-color="#75f5cf"/></linearGradient>
+  <radialGradient id="v"><stop stop-color="#6d46f9" stop-opacity=".47"/><stop offset="1" stop-color="#6d46f9" stop-opacity="0"/></radialGradient>
+  <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1.1" fill="#a0a8e4" opacity=".19"/></pattern>
+  <clipPath id="clip"><rect width="1120" height="568" rx="30"/></clipPath>
+</defs>
+<g clip-path="url(#clip)">
+<rect width="1120" height="568" fill="url(#bg)"/>
+<ellipse cx="1001" cy="216" rx="540" ry="435" fill="url(#v)"/>
+<path d="M726 0h394v568H496z" fill="url(#dots)"/>
+<path d="M735 0 513 568m282-568L573 568" stroke="#ac93ff" opacity=".19" fill="none"/>
+<path d="M0 529h1120M0 530h1120" stroke="#a080f9" opacity=".27"/>
+<g font-family="Arial, Helvetica, sans-serif">
+ <g transform="translate(54 55)">
+  <rect width="50" height="50" rx="13" fill="#c2afff"/><path d="M25 9l14 8v16l-14 8-14-8V17z" fill="none" stroke="#17152f" stroke-width="2.5"/><path d="m18 25 5 5 9-11" fill="none" stroke="#17152f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="65" y="36" fill="#f7f3ff" font-size="37" font-weight="700" letter-spacing="-1">IntentOS</text>
+ </g>
+ <text x="55" y="157" fill="#cfbfff" font-family="monospace" font-size="22" font-weight="700" letter-spacing="2">OPEN-SOURCE AGENT RUNTIME</text>
+ <text x="49" y="247" fill="#f7f4ff" font-weight="800" font-size="72" letter-spacing="-2">Give agents</text>
+ <text x="49" y="323" fill="#f7f4ff" font-weight="800" font-size="72" letter-spacing="-2">a workflow.</text>
+ <text x="49" y="407" fill="url(#m)" font-weight="800" font-size="76" letter-spacing="-3">Not the keys.</text>
+ <text x="56" y="477" fill="#d2d8ec" font-size="29">Models propose. IntentOS enforces.</text>
+ <text x="55" y="554" fill="#b9b7d4" font-size="17" font-family="monospace" letter-spacing="1">OFFLINE MVP  /  NODE 24+  /  MIT</text>
+</g>
+<!-- Visual metaphor: proposals cross a gate and leave as a verified receipt. -->
+<g transform="translate(841 272)">
+ <circle r="171" fill="#13162a" stroke="#8571ce" stroke-opacity=".48" stroke-width="1.5"/>
+ <circle r="147" fill="none" stroke="#8571ce" stroke-opacity=".44" stroke-width="1.4" stroke-dasharray="4 11"/>
+ <circle r="119" fill="none" stroke="#9e85f2" stroke-opacity=".31"/>
+ <path d="M0-189v29M0 160v29m-189-189h29m320 0h29" stroke="#b7abff" opacity=".8" stroke-width="2"/>
+ <path d="M0-112 93-58V58L0 112l-93-54V-58z" fill="#1d2140" stroke="url(#m)" stroke-width="5"/>
+ <path d="M0-91 76-47v94L0 91l-76-44v-94z" fill="none" stroke="#a7adf7" stroke-opacity=".37" stroke-width="2"/>
+ <path d="M-39 2-13 28 39-28" stroke="#78f8d5" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+ <circle cx="123" cy="-118" r="7" fill="#b39aff"/><circle cx="-125" cy="118" r="6" fill="#7df1d0"/>
+</g>
+</g>
+</svg>
