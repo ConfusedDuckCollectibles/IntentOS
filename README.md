@@ -2,67 +2,71 @@
 
 ![IntentOS: a transaction runtime for AI agents. Propose, approve, execute, verify.](docs/assets/intent-flow.svg)
 
-**TypeScript · Node 24+ · SQLite · MIT**
+**Let AI agents propose changes without giving them the keys.**
 
-[Quickstart](#quickstart) · [Demo screenshots](#demo-screenshots) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+IntentOS is an open-source transaction runtime for agent workflows. It separates **what a model suggests** from **what your software is allowed to do**. Approve the exact proposal, enforce a budget before acting, and verify what actually happened instead of taking the model's word for it.
 
-A working, CLI-first experiment in model-independent agent collaboration. A planner proposes an intent, a human operator approves its exact digest, an executor applies it to an offline simulated service, and a separate scoped verifier reads back durable evidence. Models do not receive execution capabilities.
+**Offline MVP · TypeScript · Node 24+ · SQLite · MIT**
 
-**Status: 0.1 MVP, not a production security boundary.** IntentOS is a working name, not a cleared brand; see [competitive notes](docs/COMPETITIVE-NOTES.md). All spending is integer simulation credits. No live model calls, money transfers, shell tools, or default network connectors. No dependencies or build step. Requires Node.js 24+ (native TypeScript stripping and `node:sqlite`). No Vue UI is needed for this CLI MVP.
+[Try it](#try-it) · [See the demo](#see-the-demo) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
 
-## Quickstart
+## Why IntentOS?
+
+A model can say “done” even if a service never made the change. A human can approve one proposal and the next model call can generate a different one. And if a process dies after a write, replaying it can repeat the effect. IntentOS makes those decisions the runtime's job, not the model's.
+
+| What you want | What the MVP demonstrates |
+| --- | --- |
+| **Control what runs** | Separate planner, approver, executor, and verifier roles. Approval is tied to the exact action, payload, cost, and policy version. |
+| **Stay within a cap** | The runtime checks and charges a fixed cost against a persistent pool of simulated credits before it dispatches the write. |
+| **Recover after a crash** | The simulator recognizes the same operation on retry. The included tests kill the process before and after the write and check that recovery doesn't duplicate the effect or charge. |
+| **Know it really happened** | The verifier reads the service's own record. A durable audit trail records the decisions; executor output alone can't mark an action verified. |
+
+IntentOS is for developers who want predictable action handling without committing to a model provider. The demo uses an offline planner. OpenAI and Anthropic proposal adapters are included and tested with mocked HTTP; they are not needed to run it.
+
+## Try it
+
+With **Node.js 24+**, clone this repo and run the following in the checkout. No install, account, API key, or network call required once you're in the repo.
 
 ```sh
-npm test
 npm run demo
-npm start -- status .intentos
+npm run demo   # same local state: no duplicate effect or charge
+npm test
 ```
 
-The demo explicitly approves a fixed, harmless simulated write as the local operator. It ends in `verified`, with read-back evidence and three credits charged from a twelve-credit cap. Running it again leaves the effect and charge unchanged. Nothing leaves your computer. `.intentos/` contains the two SQLite databases and is ignored by Git.
+The demo's built-in approval is for a harmless, fixed fixture. Use the manual flow below to approve a proposal yourself. Local demo state lives in `.intentos/`, which is ignored by Git.
 
-## Demo screenshots
+## See the demo
 
-**1. Approval is enforced.** The planner proposes a simulated write. The runtime refuses early execution until a human operator approves the exact proposal digest.
+**1. An agent can propose a write, but the runtime won't execute it without exact approval.**
 
 ![Terminal capture: the proposal is pending, execution fails with “Exact approval required”, then digest approval succeeds.](docs/assets/approval.png)
 
-**2. A verifier reads the result back.** A separate role checks the service record. Retrying the exact execution does not create another effect or charge: the ledger stays at **3 of 12 simulated credits**, with a valid audit chain.
+**2. A verifier checks the service record. Replay leaves the budget at 3 of 12 simulated credits.**
 
 ![Terminal capture: execution is applied, verification reports matched true, and replay leaves spending at 3 of 12 with auditValid true.](docs/assets/verification.png)
 
-These styled captures show excerpts from a real local CLI run. In the screenshots, `intentos` abbreviates `node src/cli.ts` with a shared state directory supplied for each command.
+These styled captures show excerpts from a real local run. In the screenshots, `intentos` abbreviates `node src/cli.ts` with a common state directory.
 
-## Manual exact approval
+## Approve a proposal yourself
 
 ```sh
-node src/cli.ts propose ./manual task1 'Draft release notes'
-# Inspect the displayed payload, cost, and hash. Copy the exact hash below.
+node src/cli.ts propose .intentos/manual task1 'Draft release notes'
+# Review the payload and cost, then copy the hash printed above.
 HASH='paste-the-displayed-hash-here'
-node src/cli.ts approve ./manual task1 "$HASH"
-node src/cli.ts execute ./manual task1
-node src/cli.ts verify ./manual task1
-node src/cli.ts status ./manual
+node src/cli.ts approve .intentos/manual task1 "$HASH"
+node src/cli.ts execute .intentos/manual task1
+node src/cli.ts verify .intentos/manual task1
+node src/cli.ts status .intentos/manual
 ```
 
-Use `deny` instead of `approve` to reject an intent. Executing a pending or denied intent fails. A rejected or failed intent cannot be silently amended or reapproved: create a new intent ID and obtain a fresh exact approval. A proposal with the same ID and same payload is idempotent; changed payloads conflict. The CLI is a trusted local operator tool, not an authentication service. Anyone able to operate it or modify its files is inside the host trust boundary.
+Use `deny` instead of `approve` to reject a proposal. Use `recover` with the same state directory to resume interrupted execution, then verify the applied result. See the [architecture](docs/ARCHITECTURE.md) for guarantees and failure modes.
 
-After interruption, run `node src/cli.ts recover ./manual`, then `verify` each applied intent. Recovery replays durable `executing` records using their original idempotency token. It does not approve pending work. Applied jobs await verifier action. `status` exposes the full local state and checks the audit hash chain.
+## What’s ready, and what’s next
 
-## Implemented
+**Ready to try:** An offline CLI, one simulated write adapter, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. Tests run with Node's native TypeScript support; static type checking is not configured yet.
 
-- Scoped, unforgeable-by-copy in-process actor capability objects, with separate planner, approver, executor, verifier roles.
-- Strict JSON proposals for one allowlisted action: append an immutable simulated `put` effect to a service ledger. It does not write arbitrary filesystem paths or execute commands.
-- Approval digest binds intent ID, action, canonical validated payload, runtime-fixed cost, and policy version.
-- SQLite `BEGIN IMMEDIATE` transactions, WAL, `synchronous=FULL`, persisted budget, and a transactional hash-linked audit trail.
-- Runtime-fixed cost of 3 integer credits; spend is reserved/charged atomically before execution. Restart cannot raise an existing cap.
-- Service idempotency tokens prevent duplicate effects across retry and crash windows.
-- Independent read-only service connection for deterministic verification. Executor claims alone cannot produce `verified`.
-- Interchangeable deterministic offline, OpenAI Chat Completions, and Anthropic Messages proposal adapters. Provider adapters require an explicit injected transport, model and key; CLI never imports a network transport or reads credentials.
+**Not production-ready:** The CLI trusts its local operator and host. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
 
-Provider wire formats are covered with mock HTTP responses. No real provider compatibility or latency has been tested. Reference contracts: [OpenAI Chat](https://developers.openai.com/api/reference/typescript/resources/chat) and [Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create). The transport owner is responsible for timeouts, size limits, credential handling, and any actual provider billing; simulated execution credits do not cap API bills.
+**Next:** [Narrow the agent API](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/1), then [reconcile writes when a service never answers](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/2).
 
-## Verification
-
-`npm test` uses Node's test runner with isolated temporary databases, mocked transport, and actual child-process termination. It covers success, wrong digest, denial, role/scope violations, copied capabilities, immutable IDs, budget overflow, persistence, simultaneous workers, service idempotency conflicts, evidence tampering, audit tampering, and process death before effect, after effect, and before acknowledgment commit. No network is used by tests. Node strips types; this dependency-free MVP does **not** run a TypeScript static type checker.
-
-See [architecture and guarantees](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md), and [MIT license](LICENSE).
+[Read the design](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md) · [MIT license](LICENSE) · [Competitive notes and working name](docs/COMPETITIVE-NOTES.md)
