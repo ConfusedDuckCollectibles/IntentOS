@@ -4,7 +4,7 @@
 
 **TypeScript · Node 24+ · SQLite · MIT**
 
-[Quickstart](#quickstart) · [Demo screenshots](#demo-screenshots) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+[Quickstart](#quickstart) · [Demo screenshots](#demo-screenshots) · [Architecture](docs/ARCHITECTURE.md) · [Agent API](docs/AGENT-API.md) · [Roadmap](docs/ROADMAP.md)
 
 A working, CLI-first experiment in model-independent agent collaboration. A planner proposes an intent, a human operator approves its exact digest, an executor applies it to an offline simulated service, and a separate scoped verifier reads back durable evidence. Models do not receive execution capabilities.
 
@@ -18,7 +18,7 @@ npm run demo
 npm start -- status .intentos
 ```
 
-The demo explicitly approves a fixed, harmless simulated write as the local operator. It ends in `verified`, with read-back evidence and three credits charged from a twelve-credit cap. Running it again leaves the effect and charge unchanged. Nothing leaves your computer. `.intentos/` contains the two SQLite databases and is ignored by Git.
+The demo passes narrow capabilities to separate offline planner and verifier functions; trusted CLI host code approves and executes the fixed, harmless simulated write. Auto-approval is fixture setup, not human authentication. It ends in `verified`, with read-back evidence and three credits charged from a twelve-credit cap. Running it again leaves the effect and charge unchanged. Nothing leaves your computer. `.intentos/` contains the two SQLite databases and is ignored by Git.
 
 ## Demo screenshots
 
@@ -50,7 +50,7 @@ After interruption, run `node src/cli.ts recover ./manual`, then `verify` each a
 
 ## Implemented
 
-- Scoped, unforgeable-by-copy in-process actor capability objects, with separate planner, approver, executor, verifier roles.
+- Immutable planner and verifier agent capabilities with scoped reads and writes; trusted host code retains provisioning, approval, execution and global inspection. See the [agent API](docs/AGENT-API.md). This is a cooperative application API, not a JavaScript or OS sandbox.
 - Strict JSON proposals for one allowlisted action: append an immutable simulated `put` effect to a service ledger. It does not write arbitrary filesystem paths or execute commands.
 - Approval digest binds intent ID, action, canonical validated payload, runtime-fixed cost, and policy version.
 - SQLite `BEGIN IMMEDIATE` transactions, WAL, `synchronous=FULL`, persisted budget, and a transactional hash-linked audit trail.
@@ -63,6 +63,6 @@ Provider wire formats are covered with mock HTTP responses. No real provider com
 
 ## Verification
 
-`npm test` uses Node's test runner with isolated temporary databases, mocked transport, and actual child-process termination. It covers success, wrong digest, denial, role/scope violations, copied capabilities, immutable IDs, budget overflow, persistence, simultaneous workers, service idempotency conflicts, evidence tampering, audit tampering, and process death before effect, after effect, and before acknowledgment commit. No network is used by tests. Node strips types; this dependency-free MVP does **not** run a TypeScript static type checker.
+`npm test` uses Node's test runner with isolated temporary databases, mocked transport, and actual child-process termination. It covers success, wrong digest, denial, role/scope violations, copied capabilities, immutable IDs, budget overflow, persistence, simultaneous workers, service idempotency conflicts, evidence tampering, audit tampering, and process death before effect, after effect, and before acknowledgment commit. The agent-boundary tests additionally cover scoped reads, immutable views, copied/borrowed capability rejection, role surfaces, host shutdown, and CLI replay. No network is used by tests. Node strips types; this dependency-free MVP does **not** run a TypeScript static type checker.
 
 See [architecture and guarantees](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md), and [MIT license](LICENSE).
