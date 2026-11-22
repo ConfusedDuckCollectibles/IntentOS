@@ -1,10 +1,16 @@
 # IntentOS
 
+![IntentOS: a transaction runtime for AI agents. Propose, approve, execute, verify.](docs/assets/intent-flow.svg)
+
+**TypeScript · Node 24+ · SQLite · MIT**
+
+[Quickstart](#quickstart) · [Demo screenshots](#demo-screenshots) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+
 A working, CLI-first experiment in model-independent agent collaboration. A planner proposes an intent, a human operator approves its exact digest, an executor applies it to an offline simulated service, and a separate scoped verifier reads back durable evidence. Models do not receive execution capabilities.
 
 **Status: 0.1 MVP, not a production security boundary.** IntentOS is a working name, not a cleared brand; see [competitive notes](docs/COMPETITIVE-NOTES.md). All spending is integer simulation credits. No live model calls, money transfers, shell tools, or default network connectors. No dependencies or build step. Requires Node.js 24+ (native TypeScript stripping and `node:sqlite`). No Vue UI is needed for this CLI MVP.
 
-## Run in one minute
+## Quickstart
 
 ```sh
 npm test
@@ -14,12 +20,25 @@ npm start -- status .intentos
 
 The demo explicitly approves a fixed, harmless simulated write as the local operator. It ends in `verified`, with read-back evidence and three credits charged from a twelve-credit cap. Running it again leaves the effect and charge unchanged. Nothing leaves your computer. `.intentos/` contains the two SQLite databases and is ignored by Git.
 
+## Demo screenshots
+
+**1. Approval is enforced.** The planner proposes a simulated write. The runtime refuses early execution until a human operator approves the exact proposal digest.
+
+![Terminal capture: the proposal is pending, execution fails with “Exact approval required”, then digest approval succeeds.](docs/assets/approval.png)
+
+**2. A verifier reads the result back.** A separate role checks the service record. Retrying the exact execution does not create another effect or charge: the ledger stays at **3 of 12 simulated credits**, with a valid audit chain.
+
+![Terminal capture: execution is applied, verification reports matched true, and replay leaves spending at 3 of 12 with auditValid true.](docs/assets/verification.png)
+
+These styled captures show excerpts from a real local CLI run. In the screenshots, `intentos` abbreviates `node src/cli.ts` with a shared state directory supplied for each command.
+
 ## Manual exact approval
 
 ```sh
 node src/cli.ts propose ./manual task1 'Draft release notes'
 # Inspect the displayed payload, cost, and hash. Copy the exact hash below.
-node src/cli.ts approve ./manual task1 <hash>
+HASH='paste-the-displayed-hash-here'
+node src/cli.ts approve ./manual task1 "$HASH"
 node src/cli.ts execute ./manual task1
 node src/cli.ts verify ./manual task1
 node src/cli.ts status ./manual

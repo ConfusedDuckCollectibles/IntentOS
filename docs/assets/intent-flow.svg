@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="340" viewBox="0 0 1240 340" role="img" aria-labelledby="t d">
+<title id="t">IntentOS</title>
+<desc id="d">A transaction runtime for AI agents. Four steps: propose, approve, execute, verify.</desc>
+<defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#111e38"/><stop offset="1" stop-color="#090e1c"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#2c887f" stop-opacity=".32"/><stop offset="1" stop-color="#2c887f" stop-opacity="0"/></radialGradient>
+ <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M0 28V0H28" fill="none" stroke="#546988" stroke-opacity=".15"/></pattern>
+</defs>
+<rect width="1240" height="340" rx="22" fill="url(#bg)"/>
+<svg x="700" y="0" width="540" height="340" overflow="hidden"><rect width="540" height="340" fill="url(#grid)"/><ellipse cx="357" cy="96" rx="302" ry="178" fill="url(#glow)"/><g fill="none" stroke="#6af3cf" stroke-opacity=".38"><path d="M357 24l74 42v85l-74 42-74-42V66z"/><path d="M357 41l59 34v67l-59 35-59-35V75z" stroke-opacity=".21"/><path d="M357 24v-24m74 66 63-37m-63 122 63 36m-211-36-65 36m65-121-65-37"/><path d="m327 104 21 21 41-41" stroke-opacity="1" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g><g fill="#6af3cf"><circle cx="218" cy="29" r="4"/><circle cx="494" cy="29" r="4"/><circle cx="494" cy="187" r="4"/><circle cx="218" cy="187" r="4"/></g></svg>
+<g font-family="system-ui, sans-serif">
+ <text x="54" y="57" font-family="monospace" font-size="17" font-weight="700" letter-spacing="3" fill="#6af3cf">OPEN SOURCE / OFFLINE MVP</text>
+ <text x="50" y="138" font-size="86" font-weight="750" letter-spacing="-3" fill="#eff4ff">IntentOS</text>
+ <text x="55" y="186" font-size="27" fill="#bac9e3">A transaction runtime for AI agents</text>
+ <g fill="#111c32" stroke="#30445f"><rect x="55" y="231" width="248" height="64" rx="12"/><rect x="349" y="231" width="248" height="64" rx="12"/><rect x="643" y="231" width="248" height="64" rx="12"/><rect x="937" y="231" width="248" height="64" rx="12" fill="#122e34" stroke="#468477"/></g>
+ <g font-size="19" font-family="monospace" fill="#6af3cf"><text x="74" y="270">01</text><text x="368" y="270">02</text><text x="662" y="270">03</text><text x="956" y="270">04</text></g>
+ <g font-size="23" font-weight="700" fill="#eff4ff"><text x="120" y="271">Propose</text><text x="414" y="271">Approve</text><text x="708" y="271">Execute</text><text x="1002" y="271">Verify</text></g>
+ <g stroke="#6af3cf" stroke-opacity=".65" fill="none" stroke-width="2"><path d="M317 263h19m-7-6 7 6-7 6m282-6h19m-7-6 7 6-7 6m282-6h19m-7-6 7 6-7 6"/></g>
+</g>
+</svg>
