@@ -1,22 +1,28 @@
 # IntentOS
 
-![IntentOS. Give agents a workflow, not the keys. Models propose. IntentOS enforces.](docs/assets/product-hero.svg)
+![IntentOS. Let AI help. You stay in control. Approve the plan. See what happened.](docs/assets/product-hero.svg)
 
-[![Try the offline demo](docs/assets/try-demo.svg)](#try-it)
+[![See how it works](docs/assets/try-demo.svg)](#how-it-works)
 
-**Open source. Runs locally. No API key required.**
+**IntentOS helps you stay in control of what AI does on your behalf.** It checks what you approved before anything happens, then checks the result so you know whether it worked.
 
-[Try it](#try-it) · [Watch it work](#watch-it-work) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+## How it works
 
-![“Done” is not proof. An agent claim alone does not tell you what changed; the IntentOS demo checks exact approval, budget, and the service record.](docs/assets/from-promise-to-proof.svg)
+**Imagine asking AI to schedule a post for your shop.**
 
-IntentOS separates **what a model suggests** from **what your software is allowed to do**. Approve the exact proposal, enforce a budget before acting, and verify what actually happened.
+1. **AI shows you its plan.** You see the exact post and when it would go out.
+2. **You decide what goes ahead.** Approving one post doesn't give AI permission to publish a different one. If the plan goes over a limit you set, it stops.
+3. **You get proof, not just “done.”** The system checks the destination to see what actually happened.
+
+*That's an example of what IntentOS is designed for. Today's demo uses a pretend service and pretend credits. It doesn't connect to social media, publish anything, or spend real money.*
+
+![“Done” is not proof. The demo checks three things: you approved it, it stayed within budget, and it actually happened.](docs/assets/from-promise-to-proof.svg)
 
 ## Watch it work
 
 ![Animated capture of a real offline run: proposal pending, early execution blocked, service record verified after approval, and a retry leaves the same 3 of 12 simulated credits spent.](docs/assets/demo-reel.gif)
 
-*Real offline CLI output. Simulated credits. No live service or payments.*
+*Watch the demo block an unapproved action, confirm an approved one worked, and show that a retry didn’t charge twice. No real money is used.*
 
 <details>
 <summary>See the two static terminal captures</summary>
@@ -29,7 +35,7 @@ The terminal screenshots abbreviate `node src/cli.ts` as `intentos` and use one 
 
 </details>
 
-## Try it
+## Try it on your computer
 
 With **Node.js 24+**, clone this repo and run the following in the checkout. No install, account, API key, or network call required once you're in the repo.
 
@@ -72,6 +78,6 @@ Use `deny` instead of `approve` to reject a proposal. Use `recover` with the sam
 
 **Not production-ready:** The CLI trusts its local operator and host. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
 
-**Next:** [Narrow the agent API](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/1), then [reconcile writes when a service never answers](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/2).
+**Next for developers:** [Narrow the agent API](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/1), then [reconcile writes when a service never answers](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/2).
 
 [Read the design](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md) · [MIT license](LICENSE) · [Competitive notes and working name](docs/COMPETITIVE-NOTES.md)
