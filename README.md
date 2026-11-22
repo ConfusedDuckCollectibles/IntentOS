@@ -51,12 +51,18 @@ The demo's built-in approval is for a harmless, fixed fixture. Use the manual fl
 
 | What you want | What the MVP demonstrates |
 | --- | --- |
-| **Control what runs** | Separate planner, approver, executor, and verifier roles. Approval is tied to the exact action, payload, cost, and policy version. |
+| **Control what runs** | Planner and verifier agents get only their own scoped controls. Approval and execution stay with the trusted host. Approval is tied to the exact action, payload, cost, and policy version. |
 | **Stay within a cap** | The runtime checks and charges a fixed cost against a persistent pool of simulated credits before it dispatches the write. |
 | **Recover after a crash** | The simulator recognizes the same operation on retry. The included tests kill the process before and after the write and check that recovery doesn't duplicate the effect or charge. |
 | **Know it really happened** | The verifier reads the service's own record. A durable audit trail records the decisions; executor output alone can't mark an action verified. |
 
 IntentOS is for developers who want predictable action handling without committing to a model provider. The demo uses an offline planner. OpenAI and Anthropic proposal adapters are included and tested with mocked HTTP; they are not needed to run it.
+
+## Give each agent only the controls it needs
+
+The planner can submit proposals in its assigned scope. The verifier can check service evidence in its scope. Neither can approve, execute, or inspect global state. The host passes each agent a narrow interface rather than handing it the runtime.
+
+[See the agent API and a runnable composition example](docs/AGENT-API.md).
 
 ## Approve a proposal yourself
 
@@ -76,8 +82,8 @@ Use `deny` instead of `approve` to reject a proposal. Use `recover` with the sam
 
 **Ready to try:** An offline CLI, one simulated write adapter, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. Tests run with Node's native TypeScript support; static type checking is not configured yet.
 
-**Not production-ready:** The CLI trusts its local operator and host. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
+**Not production-ready:** The CLI trusts its local operator and host. Agent capabilities are an application API boundary, not isolation from other Node.js code. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
 
-**Next for developers:** [Narrow the agent API](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/1), then [reconcile writes when a service never answers](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/2).
+**Next for developers:** [Reconcile writes when a service never answers](https://github.com/ConfusedDuckCollectibles/IntentOS/issues/2).
 
 [Read the design](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md) · [MIT license](LICENSE) · [Competitive notes and working name](docs/COMPETITIVE-NOTES.md)

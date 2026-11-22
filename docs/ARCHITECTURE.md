@@ -2,9 +2,11 @@
 
 ## Components and authority
 
-The embedding host constructs `Runtime`, owns both database paths, and mints role-scoped actors. Agent-facing code should receive only its role's methods/capability, never the Runtime object or actor factory. The offline planner and provider planners only return validated proposals. No provider can choose spend, tools, approval, or execution status. The separate verifier is deterministic code with a verifier capability, not a second model persuaded by the planner.
+The trusted application constructs `IntentHost`, which privately owns the Runtime and database paths and provisions role-specific capabilities. Planner agents receive only `propose/get/list`; verifier agents receive only `verify/get/list`. These immutable capabilities bind a private host-minted actor to a fixed namespace prefix. Read queries and state-changing operations enforce that scope. Agent code receives no runtime, factory, raw actor token, service, operator, executor, global budget or audit handle. See [Agent API](AGENT-API.md) for the contract and runnable integration example.
 
-The CLI combines these roles as an explicit trusted demonstration harness. It is not an identity provider, sandbox, multi-user service, or defense against malicious JavaScript in the same process. Actor IDs are audit labels, not authenticated identities. Scope checks apply to mutations; `snapshot` and audit access are host-level inspection methods, not scoped agent read APIs. No third-party code is loaded.
+The CLI is the trusted composition root. It passes separate capabilities into offline agent functions while retaining approval, execution, recovery and global inspection. Demo auto-approval is fixture setup, not authenticated human consent. Provider adapters import only shared proposal validation and return proposals; they cannot select spend, tools, approval or execution status. The verifier uses deterministic independent read-back, not a model's success claim.
+
+This is a cooperative application API boundary, not a JavaScript or OS sandbox, identity provider or multi-user service. The host must trust module loading, provisioning, authentication, execution scheduling and storage access. Arbitrary Node code with imports/OS access can instantiate the lower-level host-only Runtime or access databases directly. Actor IDs are audit labels, not authenticated identities. Capability references can be deliberately delegated. Scope isolates returned intent data but global ID conflicts can reveal occupancy; there is no tenant-level metadata isolation. No third-party code is loaded by the demo.
 
 ## State machine
 

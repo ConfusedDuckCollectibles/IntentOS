@@ -1,18 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 
-export type Proposal = { key: string; value: string };
+import { validateProposal } from './proposal.ts';
+import type { Proposal } from './proposal.ts';
+export { validateProposal } from './proposal.ts';
+export type { Proposal } from './proposal.ts';
 export type Role = 'planner' | 'approver' | 'executor' | 'verifier';
 export type Actor = Readonly<{ id: string; role: Role; prefix: string }>;
 export const digest = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export function validateProposal(input: unknown): Proposal {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Invalid proposal');
-  const p = input as Record<string, unknown>;
-  if (Object.keys(p).sort().join(',') !== 'key,value' || typeof p.key !== 'string' ||
-      !/^[a-z][a-z0-9_-]*\/[a-z0-9_-]{1,64}$/.test(p.key) || typeof p.value !== 'string' ||
-      Buffer.byteLength(p.value) > 4096) throw Error('Invalid proposal');
-  return { key: p.key, value: p.value };
-}
 function open(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;');
@@ -148,6 +143,22 @@ export class Runtime {
     this.#tx(a, 'recover', () => this.#auth(a, 'executor', a.prefix));
     const ids = this.#db.prepare("SELECT id,payload FROM jobs WHERE state='executing' ORDER BY id").all();
     return ids.filter(j => JSON.parse(String(j.payload)).key.startsWith(a.prefix)).map(j => this.execute(a,String(j.id)));
+  }
+  // Host-only primitives used by the narrow capability facade. Never return a full snapshot.
+  get(a: Actor, id: string) {
+    return this.#tx(a, 'get', () => {
+      this.#auth(a, a.role, a.prefix);
+      const row = this.#db.prepare("SELECT * FROM jobs WHERE id=? AND substr(json_extract(payload,'$.key'),1,length(?))=?").get(id,a.prefix,a.prefix);
+      // Do not reveal whether an out-of-scope ID exists.
+      if (!row) throw Error('Intent unavailable');
+      return row;
+    });
+  }
+  list(a: Actor) {
+    return this.#tx(a, 'list', () => {
+      this.#auth(a, a.role, a.prefix);
+      return this.#db.prepare("SELECT * FROM jobs WHERE substr(json_extract(payload,'$.key'),1,length(?))=? ORDER BY id").all(a.prefix,a.prefix);
+    });
   }
   snapshot() { return { budget: this.#db.prepare('SELECT cap,spent FROM budget').get(), jobs: this.#db.prepare('SELECT * FROM jobs ORDER BY id').all(), audit: this.#db.prepare('SELECT * FROM audit ORDER BY seq').all() }; }
   checkAudit(): boolean {
