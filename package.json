@@ -1,0 +1,7 @@
+{
+  "name": "intentos", "version": "0.1.0", "private": true,
+  "description": "A local, model-independent intent runtime with scoped actors and verified simulated outcomes",
+  "type": "module", "engines": {"node": ">=24.0.0"},
+  "scripts": {"test": "node --test test/*.test.ts", "demo": "node src/cli.ts demo", "start": "node src/cli.ts"},
+  "license": "MIT"
+}

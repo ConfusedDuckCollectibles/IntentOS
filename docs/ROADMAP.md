@@ -1,0 +1,12 @@
+# Actionable roadmap
+
+1. **Host/agent API separation.** Split privileged provisioning from narrow actor facades, add scoped read APIs and authenticated principal bindings. Acceptance: adversarial integration tests cannot access another scope or mint authority through any agent API.
+2. **Type and schema discipline.** Add pinned TypeScript and Node type development dependencies, strict typechecking, versioned database migrations, and CI on supported Node versions. Acceptance: fresh install and upgrade fixtures pass typecheck and recovery tests.
+3. **Stronger recovery coverage.** Add subprocess contention on the same intent, disk-full/lock failures, corrupted/missing stores, and approval revocation before execution. Acceptance: no unauthorized effect, overspend, or false verification in each fault fixture.
+4. **Adapter contract.** Introduce durable adapter registration/versioning, resource preconditions, tenant-namespaced idempotency keys and reconciliation for unknown outcomes. Acceptance: a second offline service independently implements the effect and read-back contract and passes common conformance tests.
+5. **Approvals and budget lifecycle.** Add authenticated approvers, expiry, revocation, configurable fixed tariffs, per-intent caps, conservative reservations, and explicit operator remediation. Acceptance: concurrent stale approvals and revoked principals fail closed.
+6. **Audit hardening.** Signed external checkpoints, export/redaction, retention policy, recovery manifests, and backup/restore validation. Acceptance: truncation and full-chain rewrite are detected against an independent checkpoint.
+7. **Optional providers.** Explicit opt-in transports with timeout/body limits, secret injection, provider-version fixtures and separate inference budgets. Acceptance: mocked network failures cannot reach execution or silently retry billable calls; live testing requires separate authorization.
+8. **Human interface.** Add a Vue 3 read-only audit/approval review UI only after authentication and exact approval semantics are implemented. Acceptance: the UI shows precise action, cost, scope and digest and cannot broaden a reviewed intent.
+
+Keep the default path offline. Defer autonomous shell execution, broad network connectors, real payments, deployment and multi-tenant hosting until their threat models and approvals are independently reviewed.

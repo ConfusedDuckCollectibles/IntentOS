@@ -1,0 +1,5 @@
+node_modules/
+.intentos/
+*.sqlite*
+coverage/
+.env*
