@@ -1,3 +1,4 @@
+import { StorePair } from './storage.ts';
 import { PublishingQueue, validateQueueProposal, queueOperationId, readQueueEvidence, assessQueueEvidence } from './queue.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
@@ -38,14 +39,11 @@ export class Runtime {
   #db: DatabaseSync;
   #actors = new WeakSet<object>();
   #servicePath: string;
+  #pair: StorePair;
   constructor(path: string, servicePath: string, cap = 12) {
     if (!Number.isSafeInteger(cap) || cap < 0) throw Error('Budget must be a nonnegative safe integer');
+    this.#pair = new StorePair(path,servicePath,cap);
     this.#db = open(path); this.#servicePath = servicePath;
-    this.#db.exec(`CREATE TABLE IF NOT EXISTS budget (id INTEGER PRIMARY KEY CHECK(id=1), cap INTEGER NOT NULL, spent INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL, hash TEXT NOT NULL, state TEXT NOT NULL, cost INTEGER NOT NULL, approval TEXT, receipt TEXT, evidence TEXT);
-      CREATE TABLE IF NOT EXISTS queue_attempts(id TEXT PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, destination TEXT NOT NULL, intent_hash TEXT NOT NULL, acknowledged_record_id TEXT);
-      CREATE TABLE IF NOT EXISTS audit (seq INTEGER PRIMARY KEY, actor TEXT NOT NULL, event TEXT NOT NULL, detail TEXT NOT NULL, previous TEXT NOT NULL, hash TEXT NOT NULL);`);
-    this.#db.prepare('INSERT OR IGNORE INTO budget VALUES (1,?,0)').run(cap);
     // Existing databases retain their original cap; reopening cannot increase it.
   }
   // Host trust boundary: only the embedding host may mint capabilities.
@@ -63,6 +61,7 @@ export class Runtime {
     this.#db.prepare('INSERT INTO audit(actor,event,detail,previous,hash) VALUES (?,?,?,?,?)').run(actor,event,body,previous,hash);
   }
   #tx<T>(a: Actor, operation: string, fn: () => T): T {
+    this.#pair.assert();
     this.#db.exec('BEGIN IMMEDIATE');
     try { const result = fn(); this.#db.exec('COMMIT'); return result; }
     catch (e) {
@@ -116,6 +115,7 @@ export class Runtime {
     });
     if (['applied','verified'].includes(j.state)) return j;
     if (crash === 'before-effect') process.exit(71);
+    this.#pair.assert();
     const service = new SimulatedService(this.#servicePath);
     let receipt: string;
     try { receipt = service.apply(j.hash, JSON.parse(j.payload)); } finally { service.close(); }
@@ -169,6 +169,7 @@ export class Runtime {
     if (fault==='before-effect') process.exit(71);
     let receipt: string;
     try {
+      this.#pair.assert();
       const service=new PublishingQueue(this.#servicePath);
       try { const p=validateQueueProposal(JSON.parse(prepared.job.payload)); receipt=service.write(queueOperationId(p.key,prepared.job.hash),prepared.job.hash,p,fault==='lose-response'); }
       finally {service.close();}
@@ -218,7 +219,7 @@ export class Runtime {
       return this.#db.prepare("SELECT * FROM jobs WHERE substr(json_extract(payload,'$.key'),1,length(?))=? ORDER BY id").all(a.prefix,a.prefix);
     });
   }
-  snapshot() { return { budget: this.#db.prepare('SELECT cap,spent FROM budget').get(), jobs: this.#db.prepare('SELECT * FROM jobs ORDER BY id').all(), audit: this.#db.prepare('SELECT * FROM audit ORDER BY seq').all() }; }
+  snapshot() { this.#pair.assert(); return { budget: this.#db.prepare('SELECT cap,spent FROM budget').get(), jobs: this.#db.prepare('SELECT * FROM jobs ORDER BY id').all(), audit: this.#db.prepare('SELECT * FROM audit ORDER BY seq').all() }; }
   checkAudit(): boolean {
     let previous = 'genesis';
     for (const row of this.snapshot().audit) {

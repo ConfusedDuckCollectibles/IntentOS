@@ -12,6 +12,7 @@
     "demo": "node src/cli.ts demo",
     "start": "node src/cli.ts",
     "demo:queue": "node src/cli.ts queue-demo",
+    "demo:storage": "node src/storage-demo.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "license": "MIT",

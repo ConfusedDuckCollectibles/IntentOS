@@ -57,12 +57,16 @@ The service checks a known record's ID, destination, current asset fingerprint, 
 - This is one-dispatch-per-persisted-intent within the original local runtime/service database pair, **not general exactly-once effects**. If the host creates a new intent for the same business action, it may duplicate that action. Human review must consider the old unresolved attempt before authorizing new work.
 - There is no automatic retry even if the service definitely appears empty. A process that paused after reserving dispatch may still resume its first call; do not manually resend based on a missing record.
 - Evidence is authoritative only within this trusted synthetic fixture. There is no cryptographic proof against an OS/database administrator, external audit anchor, distributed consensus or live read freshness guarantee.
-- Preserve the original paired stores. Replacing stores, partial restore, or deleting the attempt ledger invalidates the guarantee. Service identity binding and coordinated restore remain future work.
+- Preserve the original paired stores. Replacing stores, partial restore, or deleting the attempt ledger invalidates the guarantee. Format-1 identity binding and a stopped-worker complete-pair restore procedure are now implemented; see [storage](STORAGE.md). This is not hostile-host anti-rollback protection.
 - Spend is conservative attempted-execution accounting and is never refunded. Queue and original simulated operations use the same budget and audit when hosted in the same runtime. The CLI demo uses its own subdirectory to keep fixture counts easy to inspect.
 - `verified` records historical verification at that moment, not continuous monitoring of future service mutations. Source evidence can subsequently change. No assets are downloaded or fingerprinted by this fixture; supplied fingerprints describe synthetic assets.
 - Role capabilities remain a cooperative application API, not a JavaScript/OS sandbox. The raw runtime, stores, connector and fault controls are host-only.
-- Schema change is additive (`queue_attempts`); original tables, approval hashes and replay semantics remain intact. General schema migration tooling and static type checking are still not configured.
+- Schema change is additive (`queue_attempts`); original tables, approval hashes and replay semantics remain intact. A versioned storage gate and conservative legacy adoption are now implemented; see [storage](STORAGE.md). General legacy-data migration remains unsupported.
 
 ## Verification coverage
 
 `npm test` retains the original adapter/agent tests and adds process death before write, after commit, and before acknowledgment commit; thrown post-commit response loss; concurrent writers/retries; non-deduplicating backend behavior; unavailable/restored reads; false-positive destination/intent/asset/schedule/status/receipt evidence; missing/duplicate/stale/incomplete records; stable-ID substitution; strict proposal validation; approval/scope/budget checks; and known draft transitions. The runnable CLI demo is tested twice in separate processes with machine-checked counts.
+
+### Store failure versus uncertain service evidence
+
+The storage gate runs before queue execution and verification. A missing or replaced database now raises `Storage refused` and leaves the existing uncertain intent unchanged; it does not fabricate evidence or recreate the service. A stale/incomplete/mismatched record in the valid paired service still follows the normal uncertain-evidence review path.

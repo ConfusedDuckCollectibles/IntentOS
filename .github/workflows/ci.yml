@@ -32,3 +32,5 @@ jobs:
         run: npm run demo -- "${{ runner.temp }}/intentos-ci"
       - name: Run lost-reply demo
         run: npm run demo:queue -- "${{ runner.temp }}/intentos-ci"
+      - name: Run offline backup and restore demo
+        run: npm run demo:storage
