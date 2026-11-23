@@ -30,7 +30,7 @@ export class PublishingQueue {
   #db: DatabaseSync;
   constructor(path: string) {
     this.#db=new DatabaseSync(path);
-    this.#db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
+    this.#db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS queue_records(id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, intent_hash TEXT NOT NULL, destination TEXT NOT NULL, asset_fingerprint TEXT NOT NULL, due_at TEXT NOT NULL, status TEXT NOT NULL, sent_receipt TEXT);
       CREATE TABLE IF NOT EXISTS queue_writes(seq INTEGER PRIMARY KEY, operation_id TEXT NOT NULL, record_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS queue_source(id INTEGER PRIMARY KEY CHECK(id=1), authoritative INTEGER NOT NULL, fresh INTEGER NOT NULL);

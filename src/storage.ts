@@ -4,9 +4,9 @@ import { existsSync, readFileSync, writeFileSync, openSync, closeSync, fsyncSync
 import { resolve, dirname, join, basename } from 'node:path';
 import { validateProposal } from './proposal.ts';
 import { validateQueueProposal } from './queue.ts';
-import { RUNTIME_SCHEMA, SERVICE_SCHEMA } from './schema.ts';
+import { RUNTIME_SCHEMA, SERVICE_SCHEMA, APPROVAL_SCHEMA } from './schema.ts';
 
-export const STORAGE_VERSION = 1;
+export const STORAGE_VERSION = 2;
 const META_SQL = 'CREATE TABLE storage_meta(id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL, pair_id TEXT NOT NULL, store_id TEXT NOT NULL, peer_id TEXT NOT NULL, role TEXT NOT NULL)';
 type Identity = { device: string; inode: string };
 type Anchor = { version: number; phase: string; pairId: string; runtimeId: string; serviceId: string; servicePath: string; runtimeFile?: Identity; serviceFile?: Identity };
@@ -29,7 +29,7 @@ function readAnchor(path: string): Anchor {
   try{return JSON.parse(readFileSync(path,'utf8'));}catch{return fail('missing or unreadable pairing anchor');}
 }
 function tables(db: DatabaseSync) {return db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(x=>String(x.name));}
-const expectedRuntime = {budget:['id','cap','spent'],jobs:['id','payload','hash','state','cost','approval','receipt','evidence'],queue_attempts:['id','operation_id','destination','intent_hash','acknowledged_record_id'],audit:['seq','actor','event','detail','previous','hash']};
+const expectedRuntime = {approval_terms:['id','hash','approved_at','expires_at','claimed_at'],approval_revocations:['id','hash','revoked_at','actor'],approval_clock:['id','last_ms'],budget:['id','cap','spent'],jobs:['id','payload','hash','state','cost','approval','receipt','evidence'],queue_attempts:['id','operation_id','destination','intent_hash','acknowledged_record_id'],audit:['seq','actor','event','detail','previous','hash']};
 const expectedService = {effects:['token','payload','receipt'],queue_records:['id','operation_id','intent_hash','destination','asset_fingerprint','due_at','status','sent_receipt'],queue_writes:['seq','operation_id','record_id'],queue_source:['id','authoritative','fresh']};
 const normalizeDdl = (sql: string) => sql.toLowerCase().replace(/\bif\s+not\s+exists\b/g,'').replace(/\s+/g,'');
 function expectedDdl(schema: string) {
@@ -41,27 +41,29 @@ function expectedDdl(schema: string) {
   } finally {db.close();}
 }
 const runtimeDdl=expectedDdl(RUNTIME_SCHEMA+' '+META_SQL);
+const runtimeV1Ddl=new Map([...runtimeDdl].filter(([name])=>!name.startsWith('approval_')));
 const serviceDdl=expectedDdl(SERVICE_SCHEMA+' '+META_SQL);
-function checkSchema(db: DatabaseSync,role: 'runtime'|'service',legacy=false) {
-  const expected=role==='runtime'?runtimeDdl:serviceDdl;
+function checkSchema(db: DatabaseSync,role: 'runtime'|'service',version=STORAGE_VERSION,legacy=false) {
+  if(version===1 && role==='runtime' && tables(db).some(t=>t.startsWith('approval_'))) fail('format-1 store contains unsupported approval state');
+  const expected=role==='runtime'?(version===1?runtimeV1Ddl:runtimeDdl):serviceDdl;
   const rows=db.prepare("SELECT type,name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all();
   for (const row of rows) {
     if (row.type!=='table' || expected.get(String(row.name))!==normalizeDdl(String(row.sql))) fail(role+' schema differs at '+row.name);
   }
   if (!legacy && rows.length!==expected.size) fail(role+' schema differs: missing table');
 }
-function metadata(db: DatabaseSync) {
+function metadata(db: DatabaseSync,expectedVersion=STORAGE_VERSION) {
   const version=db.prepare('PRAGMA user_version').get()!.user_version;
-  if (version!==STORAGE_VERSION) fail(`unsupported schema version ${version}; expected ${STORAGE_VERSION}`);
+  if (version!==expectedVersion) fail(`unsupported schema version ${version}; expected ${expectedVersion}`);
   if (!tables(db).includes('storage_meta')) fail('unversioned legacy store; explicit adoption required');
   const rows=db.prepare('SELECT * FROM storage_meta').all();
-  if(rows.length!==1 || rows[0].id!==1 || rows[0].schema_version!==STORAGE_VERSION) fail('invalid storage metadata');
+  if(rows.length!==1 || rows[0].id!==1 || rows[0].schema_version!==expectedVersion) fail('invalid storage metadata');
   return rows[0];
 }
 function assertMetadata(db: DatabaseSync, a: Anchor, role: 'runtime'|'service') {
-  const m=metadata(db);const runtime=role==='runtime';
+  const m=metadata(db,a.version);const runtime=role==='runtime';
   if(m.pair_id!==a.pairId || m.store_id!==(runtime?a.runtimeId:a.serviceId) || m.peer_id!==(runtime?a.serviceId:a.runtimeId) || m.role!==role) fail('store identities do not match the pair');
-  checkSchema(db,role);
+  checkSchema(db,role,a.version);
 }
 function stamp(db: DatabaseSync,a: Anchor,role: 'runtime'|'service') {
   db.exec('BEGIN IMMEDIATE');
@@ -110,7 +112,7 @@ export class StorePair {
     if(JSON.stringify(identity(this.#runtimePath))!==JSON.stringify(a.runtimeFile) || JSON.stringify(identity(this.#servicePath))!==JSON.stringify(a.serviceFile)) fail('paired file was replaced; use verified offline restore');
     if(JSON.stringify(a.runtimeFile)===JSON.stringify(a.serviceFile)) fail('runtime and service cannot be the same file');
     for(const [path,role] of [[this.#runtimePath,'runtime'],[this.#servicePath,'service']] as const) {
-      const db=new DatabaseSync(path,{readOnly:true});try{assertMetadata(db,a,role);}finally{db.close();}
+      const db=new DatabaseSync(path,{readOnly:true});try{db.exec('PRAGMA busy_timeout=5000;');assertMetadata(db,a,role);}finally{db.close();}
     }
   }
 }
@@ -133,7 +135,7 @@ export function adoptLegacyPair(runtimePath: string,servicePath: string) {
     }
     const rt=tables(runtime),st=tables(service);
     if(!['audit','budget','jobs'].every(t=>rt.includes(t)) || rt.some(t=>!Object.hasOwn(expectedRuntime,t)) || st.some(t=>!Object.hasOwn(expectedService,t))) fail('unknown legacy schema');
-    checkSchema(runtime,'runtime',true);checkSchema(service,'service',true);
+    checkSchema(runtime,'runtime',1,true);checkSchema(service,'service',1,true);
     const budgets=runtime.prepare('SELECT * FROM budget').all();const b=budgets[0];
     if(budgets.length!==1 || b.id!==1 || !Number.isSafeInteger(b.cap) || Number(b.cap)<0 || b.spent!==0) fail('legacy budget is invalid or has prior spend');
     for(const row of runtime.prepare('SELECT * FROM jobs').all()) {
@@ -152,6 +154,7 @@ export function adoptLegacyPair(runtimePath: string,servicePath: string) {
       previous=String(row.hash);
     }
     for(const table of ['effects','queue_records','queue_writes']) if(st.includes(table) && service.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()!.n!==0) fail('legacy service effects require manual review');
+    for(const table of ['approval_terms','approval_revocations']) if(rt.includes(table) && runtime.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()!.n!==0) fail('unexpected legacy approval records');
     const a=anchorFor(runtimePath,servicePath);durableWrite(`${runtimePath}.pair.json`,a,true);
     runtime.exec(RUNTIME_SCHEMA);service.exec(SERVICE_SCHEMA);
     stamp(runtime,a,'runtime');stamp(service,a,'service');
@@ -191,9 +194,9 @@ export function restorePair(backupDirectory: string,destination: string) {
   backupDirectory=resolve(backupDirectory);destination=join(realpathSync(dirname(resolve(destination))),basename(destination));
   if(existsSync(destination)) fail('restore destination must not exist');
   const manifest=JSON.parse(readFileSync(join(backupDirectory,'backup.json'),'utf8'));
-  if(manifest.format!==1 || manifest.storageVersion!==STORAGE_VERSION) fail('unsupported backup version');
+  if(manifest.format!==1 || ![1,STORAGE_VERSION].includes(manifest.storageVersion)) fail('unsupported backup version');
   for(const name of ['runtime.sqlite','service.sqlite']) if(hash(readFileSync(join(backupDirectory,name)))!==manifest.files?.[name]) fail('backup checksum mismatch');
-  const expected:Anchor={version:STORAGE_VERSION,phase:'ready',pairId:manifest.pairId,runtimeId:manifest.runtimeId,serviceId:manifest.serviceId,servicePath:''};
+  const expected:Anchor={version:manifest.storageVersion,phase:'ready',pairId:manifest.pairId,runtimeId:manifest.runtimeId,serviceId:manifest.serviceId,servicePath:''};
   for(const [name,role] of [['runtime.sqlite','runtime'],['service.sqlite','service']] as const) {
     const db=new DatabaseSync(join(backupDirectory,name),{readOnly:true});try{assertMetadata(db,expected,role);if(db.prepare('PRAGMA integrity_check').get()!.integrity_check!=='ok') fail('backup integrity failure');}finally{db.close();}
   }
@@ -202,7 +205,7 @@ export function restorePair(backupDirectory: string,destination: string) {
   for(const [name,role] of [['runtime.sqlite','runtime'],['service.sqlite','service']] as const) {
     const path=join(stage,name);copyFileSync(join(backupDirectory,name),path,constants.COPYFILE_EXCL);
     if(hash(readFileSync(path))!==manifest.files[name]) fail('backup changed during restore');
-    const db=new DatabaseSync(path);try{db.exec('PRAGMA synchronous=FULL; BEGIN IMMEDIATE; DROP TABLE storage_meta; COMMIT;');stamp(db,a,role);}finally{db.close();}
+    const db=new DatabaseSync(path);try{db.exec('PRAGMA synchronous=FULL; BEGIN IMMEDIATE; DROP TABLE storage_meta; COMMIT;');if(role==='runtime') db.exec(APPROVAL_SCHEMA);stamp(db,a,role);}finally{db.close();}
   }
   // Anchor physical identities survive the directory rename. Final service path is bound explicitly.
   a.phase='ready';a.runtimeFile=identity(join(stage,'runtime.sqlite'));a.serviceFile=identity(join(stage,'service.sqlite'));
@@ -215,4 +218,22 @@ export function restorePair(backupDirectory: string,destination: string) {
   syncDir(destination);syncDir(dirname(destination));rmdirSync(stage);
   new StorePair(join(destination,'runtime.sqlite'),join(destination,'service.sqlite'),12).assert();
   return {restored:destination,storageVersion:STORAGE_VERSION,pairId:a.pairId};
+}
+
+/** Explicit stopped-worker upgrade. Existing approvals receive no lifetime and cannot authorize new dispatch. */
+export function upgradeApprovalState(runtimePath: string,servicePath: string) {
+  runtimePath=resolve(runtimePath);servicePath=resolve(servicePath);
+  const a=readAnchor(`${runtimePath}.pair.json`);
+  if(a.version!==1 || a.phase!=='ready') fail('approval upgrade requires a ready format-1 pair');
+  if(a.servicePath!==realpathExisting(servicePath) || JSON.stringify(identity(runtimePath))!==JSON.stringify(a.runtimeFile) || JSON.stringify(identity(servicePath))!==JSON.stringify(a.serviceFile)) fail('upgrade pair identity mismatch');
+  const runtime=new DatabaseSync(runtimePath);let service:DatabaseSync|undefined;
+  try {
+    service=new DatabaseSync(servicePath);offlineLock(runtime);offlineLock(service);
+    assertMetadata(runtime,a,'runtime');assertMetadata(service,a,'service');
+    a.phase='upgrading';durableWrite(`${runtimePath}.pair.json`,a);
+    runtime.exec(APPROVAL_SCHEMA);
+    for(const db of [runtime,service]) db.exec(`BEGIN IMMEDIATE; UPDATE storage_meta SET schema_version=${STORAGE_VERSION}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT;`);
+    a.version=STORAGE_VERSION;finishAnchor(runtimePath,servicePath,a);
+    return {storageVersion:STORAGE_VERSION,upgraded:true,legacyApprovalsReauthorized:false};
+  }finally{service?.close();runtime.close();}
 }

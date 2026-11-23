@@ -7,12 +7,15 @@ import { validateProposal } from './proposal.ts';
 import type { Proposal } from './proposal.ts';
 export { validateProposal } from './proposal.ts';
 export type { Proposal } from './proposal.ts';
+export type ApprovalPolicy = { clock?: () => number; approvalLifetimeMs?: number };
+export const DEFAULT_APPROVAL_LIFETIME_MS = 300_000;
+export const MAX_APPROVAL_LIFETIME_MS = 86_400_000;
 export type Role = 'planner' | 'approver' | 'executor' | 'verifier';
 export type Actor = Readonly<{ id: string; role: Role; prefix: string }>;
 export const digest = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function open(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
-  db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;');
+  db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
   return db;
 }
 export class SimulatedService {
@@ -40,8 +43,15 @@ export class Runtime {
   #actors = new WeakSet<object>();
   #servicePath: string;
   #pair: StorePair;
-  constructor(path: string, servicePath: string, cap = 12) {
+  #clock: () => number;
+  #lifetime: number;
+  #observedClock = 0;
+  constructor(path: string, servicePath: string, cap = 12, policy: ApprovalPolicy = {}) {
     if (!Number.isSafeInteger(cap) || cap < 0) throw Error('Budget must be a nonnegative safe integer');
+    this.#clock = policy.clock ?? Date.now;
+    this.#lifetime = policy.approvalLifetimeMs ?? DEFAULT_APPROVAL_LIFETIME_MS;
+    if(typeof this.#clock !== 'function') throw Error('Trusted clock required');
+    this.#validLifetime(this.#lifetime);
     this.#pair = new StorePair(path,servicePath,cap);
     this.#db = open(path); this.#servicePath = servicePath;
     // Existing databases retain their original cap; reopening cannot increase it.
@@ -67,14 +77,52 @@ export class Runtime {
     catch (e) {
       this.#db.exec('ROLLBACK');
       this.#db.exec('BEGIN IMMEDIATE');
-      try { this.#event(this.#actors.has(a) ? a.id : 'unknown', 'denied', { operation, reason: String(e) }); this.#db.exec('COMMIT'); }
+      try { this.#db.prepare('UPDATE approval_clock SET last_ms=MAX(last_ms,?) WHERE id=1').run(this.#observedClock); this.#event(this.#actors.has(a) ? a.id : 'unknown', 'denied', { operation, reason: String(e) }); this.#db.exec('COMMIT'); }
       catch { this.#db.exec('ROLLBACK'); }
       throw e;
     }
   }
   #job(id: string): any {
     const row = this.#db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
-    if (!row) throw Error('Unknown intent'); return row;
+    if (!row) throw Error('Unknown intent'); return this.#view(row);
+  }
+  #view(row: any) {
+    const terms=this.#db.prepare('SELECT * FROM approval_terms WHERE id=?').get(row.id);
+    const revocation=this.#db.prepare('SELECT * FROM approval_revocations WHERE id=?').get(row.id);
+    return {...row,approvalExpiresAt:terms?.expires_at ?? null,approvalRevokedAt:revocation?.revoked_at ?? null,dispatchClaimedAt:terms?.claimed_at ?? null};
+  }
+  #validLifetime(ms: number) {
+    if(!Number.isSafeInteger(ms) || ms<1 || ms>MAX_APPROVAL_LIFETIME_MS) throw Error('Approval lifetime must be 1..86400000 integer milliseconds');
+  }
+  #now() {
+    const now=this.#clock();
+    const last=this.#db.prepare('SELECT last_ms FROM approval_clock WHERE id=1').get()?.last_ms;
+    if(!Number.isSafeInteger(now) || now<0 || typeof last!=='number' || now<last) throw Error('Trusted clock invalid or moved backwards');
+    this.#observedClock=Math.max(this.#observedClock,now);
+    this.#db.prepare('UPDATE approval_clock SET last_ms=? WHERE id=1').run(now);
+    return now;
+  }
+  // Revocation removes authority, so a broken clock must not prevent this restriction.
+  #revocationTime() {
+    const last=this.#db.prepare('SELECT last_ms FROM approval_clock WHERE id=1').get()?.last_ms;
+    if(typeof last!=='number' || !Number.isSafeInteger(last) || last<0) throw Error('Invalid durable approval clock');
+    let observed: number | undefined;
+    try {observed=this.#clock();} catch { /* Restrict authority using the recorded high-water mark. */ }
+    const valid=typeof observed==='number' && Number.isSafeInteger(observed) && observed>=last;
+    const now=valid ? observed! : last;
+    this.#observedClock=Math.max(this.#observedClock,now);
+    this.#db.prepare('UPDATE approval_clock SET last_ms=? WHERE id=1').run(now);
+    return {now,clockStatus:valid?'trusted-clock':'durable-high-water-fallback'};
+  }
+  #claimApproval(j: any) {
+    const now=this.#now();
+    const terms=this.#db.prepare('SELECT * FROM approval_terms WHERE id=?').get(j.id);
+    if(this.#db.prepare('SELECT id FROM approval_revocations WHERE id=?').get(j.id)) throw Error('Approval revoked');
+    if(!terms || terms.hash!==j.hash || j.approval!==j.hash) throw Error('Finite exact approval required; review legacy approval explicitly');
+    if(terms.claimed_at!==null) throw Error('Approval already claimed');
+    if(typeof terms.expires_at!=='number' || now>=terms.expires_at) throw Error('Approval expired');
+    this.#db.prepare('UPDATE approval_terms SET claimed_at=? WHERE id=?').run(now,j.id);
+    this.#event('runtime','approval-claimed',{id:j.id,hash:j.hash,claimedAt:now,expiresAt:terms.expires_at});
   }
   propose(a: Actor, id: string, input: unknown) {
     return this.#tx(a, 'propose', () => {
@@ -84,17 +132,37 @@ export class Runtime {
       const payload = JSON.stringify(p);
       const hash = digest({ id, action: 'action' in p ? p.action : 'simulated.put', payload, cost: 3, policy: 1 });
       const old = this.#db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
-      if (old) { if (old.hash !== hash) throw Error('Idempotency conflict'); return old; }
+      if (old) { if (old.hash !== hash) throw Error('Idempotency conflict'); return this.#view(old); }
       this.#db.prepare("INSERT INTO jobs(id,payload,hash,state,cost) VALUES (?,?,?,'pending',3)").run(id,payload,hash);
       this.#event(a.id,'proposed',{ id, hash }); return this.#job(id);
     });
   }
-  decide(a: Actor, id: string, expectedHash: string, allow: boolean) {
+  decide(a: Actor, id: string, expectedHash: string, allow: boolean, lifetimeMs = this.#lifetime) {
     return this.#tx(a,'decide',() => {
       const j = this.#job(id); this.#auth(a,'approver',JSON.parse(j.payload).key);
-      if (j.hash !== expectedHash || j.state !== 'pending' || typeof allow !== 'boolean') throw Error('Approval mismatch or invalid state');
+      const legacyReview=j.state==='approved' && !this.#db.prepare('SELECT id FROM approval_terms WHERE id=?').get(id);
+      if (j.hash !== expectedHash || (!legacyReview && j.state !== 'pending') || typeof allow !== 'boolean') throw Error('Approval mismatch or invalid state');
+      if(this.#db.prepare('SELECT id FROM approval_revocations WHERE id=?').get(id)) throw Error('Approval revoked');
+      if(allow) {
+        this.#validLifetime(lifetimeMs);const now=this.#now();const expiresAt=now+lifetimeMs;
+        if(!Number.isSafeInteger(expiresAt)) throw Error('Approval expiry overflow');
+        this.#db.prepare('INSERT INTO approval_terms VALUES(?,?,?,?,NULL)').run(id,expectedHash,now,expiresAt);
+        this.#event(a.id,'approval-lifetime',{id,hash:expectedHash,approvedAt:now,expiresAt,legacyReview});
+      }
       this.#db.prepare('UPDATE jobs SET state=?, approval=? WHERE id=?').run(allow ? 'approved' : 'denied', allow ? expectedHash : null,id);
       this.#event(a.id,allow ? 'approved' : 'rejected',{ id, hash: expectedHash }); return this.#job(id);
+    });
+  }
+  revoke(a: Actor, id: string, expectedHash: string) {
+    return this.#tx(a,'revoke',()=>{
+      const j=this.#job(id);this.#auth(a,'approver',JSON.parse(j.payload).key);
+      if(j.hash!==expectedHash || j.approval!==expectedHash) throw Error('Revocation requires exact approved intent');
+      if(this.#db.prepare('SELECT id FROM approval_revocations WHERE id=?').get(id)) return j;
+      const {now,clockStatus}=this.#revocationTime();
+      this.#db.prepare('INSERT INTO approval_revocations VALUES(?,?,?,?)').run(id,expectedHash,now,a.id);
+      const dispatched=['executing','uncertain','applied','verified','failed'].includes(j.state);
+      this.#event(a.id,'approval-revoked',{id,hash:expectedHash,revokedAt:now,clockStatus,effect:dispatched?'already-dispatched-no-undo':'blocked-before-dispatch'});
+      return this.#job(id);
     });
   }
   execute(a: Actor, id: string, crash?: 'before-effect' | 'after-effect' | 'before-commit' | 'lose-response') {
@@ -105,6 +173,7 @@ export class Runtime {
       if (['applied','verified'].includes(j.state)) return j;
       if (!['approved','executing'].includes(j.state) || j.approval !== j.hash) throw Error('Exact approval required');
       if (j.state === 'approved') {
+        this.#claimApproval(j);
         const b: any = this.#db.prepare('SELECT * FROM budget WHERE id=1').get();
         if (j.cost > b.cap - b.spent) throw Error('Budget exceeded');
         this.#db.prepare('UPDATE budget SET spent=spent+? WHERE id=1').run(j.cost);
@@ -137,6 +206,7 @@ export class Runtime {
       if (j.state !== 'applied') throw Error('Intent is not applied');
       // Separate read-only connection. Executor success text is not evidence.
       const reader = new DatabaseSync(this.#servicePath, { readOnly: true });
+      reader.exec('PRAGMA busy_timeout=5000;');
       let effect: any;
       try { effect = reader.prepare('SELECT * FROM effects WHERE token=?').get(j.hash); } finally { reader.close(); }
       const ok = effect?.payload === j.payload && effect?.receipt === digest({ token: j.hash, payload: j.payload }) && effect?.receipt === j.receipt;
@@ -156,6 +226,7 @@ export class Runtime {
       const j=this.#job(id); const p=validateQueueProposal(JSON.parse(j.payload)); this.#auth(a,'executor',p.key);
       if (['uncertain','applied','verified'].includes(j.state)) return {job:j,dispatch:false};
       if (j.state !== 'approved' || j.approval !== j.hash) throw Error('Exact approval required');
+      this.#claimApproval(j);
       const b:any=this.#db.prepare('SELECT * FROM budget WHERE id=1').get();
       if (j.cost > b.cap-b.spent) throw Error('Budget exceeded');
       const operationId=queueOperationId(p.key,j.hash);
@@ -210,16 +281,16 @@ export class Runtime {
       const row = this.#db.prepare("SELECT * FROM jobs WHERE id=? AND substr(json_extract(payload,'$.key'),1,length(?))=?").get(id,a.prefix,a.prefix);
       // Do not reveal whether an out-of-scope ID exists.
       if (!row) throw Error('Intent unavailable');
-      return row;
+      return this.#view(row);
     });
   }
   list(a: Actor) {
     return this.#tx(a, 'list', () => {
       this.#auth(a, a.role, a.prefix);
-      return this.#db.prepare("SELECT * FROM jobs WHERE substr(json_extract(payload,'$.key'),1,length(?))=? ORDER BY id").all(a.prefix,a.prefix);
+      return this.#db.prepare("SELECT * FROM jobs WHERE substr(json_extract(payload,'$.key'),1,length(?))=? ORDER BY id").all(a.prefix,a.prefix).map(row=>this.#view(row));
     });
   }
-  snapshot() { this.#pair.assert(); return { budget: this.#db.prepare('SELECT cap,spent FROM budget').get(), jobs: this.#db.prepare('SELECT * FROM jobs ORDER BY id').all(), audit: this.#db.prepare('SELECT * FROM audit ORDER BY seq').all() }; }
+  snapshot() { this.#pair.assert(); return { budget: this.#db.prepare('SELECT cap,spent FROM budget').get(), jobs: this.#db.prepare('SELECT * FROM jobs ORDER BY id').all(), audit: this.#db.prepare('SELECT * FROM audit ORDER BY seq').all(), approvalTerms: this.#db.prepare('SELECT * FROM approval_terms ORDER BY id').all(), revocations: this.#db.prepare('SELECT * FROM approval_revocations ORDER BY id').all() }; }
   checkAudit(): boolean {
     let previous = 'genesis';
     for (const row of this.snapshot().audit) {

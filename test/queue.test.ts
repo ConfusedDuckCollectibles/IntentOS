@@ -24,6 +24,13 @@ function setup(t:any,cap=12) {
   return {dir,state,service,r,p,a,e,v,approve,mutate,counts};
 }
 const worker=(dir:string,point:string,id='one')=>spawnSync(process.execPath,['src/queue-demo-worker.ts',dir,id,point],{encoding:'utf8'});
+const concurrentDispatch = (dir: string) => new Promise<void>((resolve,reject)=>{
+  const c=spawn(process.execPath,['src/queue-demo-worker.ts',dir,'one','none'],{stdio:['ignore','ignore','pipe']});
+  let stderr='';
+  c.stderr.setEncoding('utf8'); c.stderr.on('data',d=>{stderr+=d;});
+  c.on('error',reject);
+  c.on('close',(code,signal)=>{if(code===0) resolve();else reject(Error('Queue worker failed code='+code+' signal='+signal+'\n'+stderr));});
+});
 test('queue genuinely does not deduplicate identical backend calls',t=>{
  const f=setup(t);const s=new PublishingQueue(f.service);try{s.write('token','hash',proposal);s.write('token','hash',proposal);}finally{s.close();}
  assert.deepEqual(f.counts(),{attempts:0,writes:2,records:2,spent:0});
@@ -50,8 +57,7 @@ test('crash before write does not trigger resend even when fresh read finds noth
 });
 test('concurrent dispatchers and retries cannot send or debit twice',async t=>{
  const f=setup(t);f.approve();
- const run=()=>new Promise(resolve=>{const c=spawn(process.execPath,['src/queue-demo-worker.ts',f.dir,'one','none'],{stdio:'ignore'});c.on('exit',resolve);});
- assert.deepEqual(await Promise.all([run(),run(),run(),run()]),[0,0,0,0]);
+ await Promise.all(Array.from({length:4},()=>concurrentDispatch(f.dir)));
  assert.equal(f.r.verify(f.v,'one').state,'verified');assert.deepEqual(f.counts(),{attempts:1,writes:1,records:1,spent:3});
 });
 for(const [name,sql,reason] of [
@@ -124,8 +130,7 @@ test('queue CLI demo has machine-checkable proof and remains replay safe',t=>{
 });
 test('concurrent retries of a lost response remain read-only until verifier reconciliation',async t=>{
  const f=setup(t);f.approve();f.r.execute(f.e,'one','lose-response');
- const run=()=>new Promise(resolve=>{const c=spawn(process.execPath,['src/queue-demo-worker.ts',f.dir,'one','none'],{stdio:'ignore'});c.on('exit',resolve);});
- assert.deepEqual(await Promise.all([run(),run(),run()]),[0,0,0]);
+ await Promise.all(Array.from({length:3},()=>concurrentDispatch(f.dir)));
  assert.equal(f.r.get(f.p,'one').state,'uncertain');assert.deepEqual(f.counts(),{attempts:1,writes:1,records:1,spent:3});
  assert.equal(f.r.verify(f.v,'one').state,'verified');
 });

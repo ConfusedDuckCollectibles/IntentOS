@@ -34,3 +34,5 @@ jobs:
         run: npm run demo:queue -- "${{ runner.temp }}/intentos-ci"
       - name: Run offline backup and restore demo
         run: npm run demo:storage
+      - name: Run offline approval demo
+        run: npm run demo:approvals

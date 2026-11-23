@@ -1,12 +1,12 @@
 # Trusted host and agent API
 
-Issue #1 separates cooperative agent code from privileged runtime operations. Use `IntentHost` in trusted application code and pass only a role-specific capability into each agent function. `agents.ts` contains the agent-facing TypeScript interfaces; it imports no runtime or SQLite implementation.
+The public API separates cooperative agent code from privileged runtime operations. Use `IntentHost` in trusted application code and pass only a role-specific capability into each agent function. `agents.ts` contains the agent-facing TypeScript interfaces; it imports no runtime or SQLite implementation.
 
 | Recipient | Methods | Authority |
 | --- | --- | --- |
 | Planner agent | `propose(id, input)`, `get(id)`, `list()` | Propose within its fixed prefix; read that scope |
 | Verifier agent | `verify(id)`, `get(id)`, `list()` | Independently verify applied intents within its fixed prefix; read that scope |
-| Trusted operator | `decide(id, hash, allow)`, `get(id)`, `list()` | Exact approval or denial within its provisioned scope |
+| Trusted operator | `decide(id, hash, allow, lifetimeMs?)`, `revoke(id, hash)`, `get(id)`, `list()` | Finite exact approval, denial or revocation within its provisioned scope |
 | Trusted executor | `execute(id)`, `recover()`, `get(id)`, `list()` | Apply approved work and recover interrupted work within its provisioned scope |
 | Trusted host | `planner`, `verifier`, `operator`, `executor`, `inspect`, `close` | Provision capabilities, own stores and inspect global state |
 
@@ -16,7 +16,7 @@ There is deliberately no executor or approver **agent** interface. Those capabil
 
 ```ts
 // Trusted application composition root, never agent code:
-import { IntentHost } from './src/host.ts';
+import { IntentHost } from './src/index.ts';
 import { planOffline, verifyOffline } from './src/demo-agents.ts';
 
 const host = new IntentHost('/existing-dir/runtime.sqlite', '/existing-dir/service.sqlite');
@@ -64,3 +64,9 @@ The same planner `propose` and verifier `verify` capabilities now support the st
 ## Storage is a host responsibility
 
 Agents receive no storage-maintenance handles. The host owns versioned store initialization, explicit legacy adoption and stopped-worker backup/restore. A storage refusal must be shown to the operator and must not trigger creating a replacement database or reissuing the intent. See [storage](STORAGE.md).
+
+## Approval lifecycle
+
+The trusted host may set a default finite lifetime and trusted clock in constructor options. Only the operator capability can set a lifetime or revoke an exact approval. Agent intent views include immutable `approvalExpiresAt`, `approvalRevokedAt` and `dispatchClaimedAt` metadata but gain no new mutation methods. A committed dispatch remains recoverable after expiry/revocation; the decision is enforced atomically at first claim. See [approvals](APPROVALS.md).
+
+Public source-checkout imports and compatibility surface are documented in [Public API](PUBLIC-API.md). The raw Runtime remains an internal implementation detail.

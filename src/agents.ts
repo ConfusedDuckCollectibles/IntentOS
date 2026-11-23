@@ -2,6 +2,7 @@
 export type IntentView = Readonly<{
   id: string; payload: string; hash: string; state: string; cost: number;
   approval: string | null; receipt: string | null; evidence: string | null;
+  approvalExpiresAt: number | null; approvalRevokedAt: number | null; dispatchClaimedAt: number | null;
 }>;
 export interface ScopedReader {
   get(id: string): IntentView;

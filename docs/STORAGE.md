@@ -1,12 +1,12 @@
 # Versioned local stores, upgrade and offline recovery
 
-Storage format **1** binds the runtime ledger and synthetic service database as one pair. This release refuses an unknown pair instead of silently creating a replacement service and risking a duplicate effect or misleading verification. This is a trusted-local safety check, not protection against a malicious filesystem administrator.
+Storage format **2** binds the runtime ledger and synthetic service database as one pair. This release refuses an unknown pair instead of silently creating a replacement service and risking a duplicate effect or misleading verification. This is a trusted-local safety check, not protection against a malicious filesystem administrator.
 
 ## Fresh start and checks
 
 The normal `Runtime` / `IntentHost` constructor initializes a fresh pair only when both requested database paths and the pairing anchor are absent. The parent directories must exist. It initializes all runtime and service tables, including the two offline adapters; service creation is no longer deferred until the first write.
 
-Each database stores `PRAGMA user_version=1` and a `storage_meta` row with format version, random pair ID, random store ID, peer store ID and runtime/service role. The adjacent `runtime.sqlite.pair.json` anchor binds these identities to the configured service path and each file's local device/inode identity. Keep the anchor with the databases.
+Each database stores `PRAGMA user_version=2` and a `storage_meta` row with format version, random pair ID, random store ID, peer store ID and runtime/service role. The adjacent `runtime.sqlite.pair.json` anchor binds these identities to the configured service path and each file's local device/inode identity. Keep the anchor with the databases.
 
 Initialization durably writes an `initializing` anchor first and promotes it to `ready` only after both stores have been initialized and synchronized. An interrupted initialization is refused on subsequent open. It is not guessed to be empty or automatically repaired. Preserve the directory for review; if it was only a disposable demo, explicitly choose a new empty state directory.
 
@@ -18,7 +18,7 @@ node src/storage-cli.ts check .intentos
 
 `check` never creates missing stores. Its JSON result reports `valid` and `storageVersion`. A refusal returns a nonzero exit status and a reason. The ordinary CLI also returns nonzero on storage refusal. A queue whose service file is unavailable retains its previous uncertain state; the storage gate refuses verification and execution rather than writing new evidence into an unsafe pair. When the **original file** is restored at the original path with the same identity, reconciliation can continue.
 
-## Explicit legacy adoption (unversioned → format 1)
+## Explicit legacy adoption (unversioned → format 2)
 
 Older releases have no pairing proof. There is no automatic adoption, including when a previous demo left files in `.intentos`. **Stop all workers, preserve an offline copy of the original files and WAL sidecars, and review which two files belong together before attempting adoption.** Old programs must stay stopped and must never reopen the adopted stores; they do not understand the new gate.
 
@@ -35,11 +35,11 @@ Adoption accepts only a conservative no-dispatch history:
 - The audit must be an intact chain containing only proposal/approval/rejection/denial events.
 - The service must have no effects, queue records or queue writes; no unknown table names are accepted.
 
-The upgrade adds missing queue-era tables, stamps both identities/version and creates the anchor. It preserves existing intent IDs, payloads, approval hashes, caps and audit entries. Tests exercise both original-era and queue-era legacy layouts. The explicit operator command is an assertion about provenance; unversioned data cannot prove that a legacy file was never rolled back.
+The adoption adds missing queue-era and approval-lifecycle tables, stamps both identities/version and creates the anchor. It does not issue finite lifetimes: adopted old approvals must be explicitly reviewed again before first dispatch. It preserves existing intent IDs, payloads, approval hashes, caps and audit entries. Tests exercise both original-era and queue-era legacy layouts. The explicit operator command is an assertion about provenance; unversioned data cannot prove that a legacy file was never rolled back.
 
 Prior spend, executing/uncertain/applied/verified intents, attempt records, service effects or inconsistent history are **refused**. Do not erase those rows or reset spend to force acceptance. Preserve that pair and use its original release in an isolated offline review, or retain it as an archive and start a different empty directory. Migration of previously dispatched legacy data is not implemented. A partially completed adoption leaves an initializing anchor or partial metadata and is refused, not retried blindly.
 
-There is no automatic downgrade and no implemented future format migration. A newer `user_version` or metadata version is refused before normal runtime operations.
+There is no automatic downgrade. Format-1 pairs have an explicit stopped-worker upgrade to format 2; see [approvals](APPROVALS.md). No later format migration is implemented. A newer `user_version` or metadata version is refused before normal runtime operations.
 
 ## Backup: stop workers first
 
@@ -64,7 +64,7 @@ node src/cli.ts recover ./restored-state
 node src/cli.ts verify ./restored-state INTENT_ID
 ```
 
-Restore never overwrites an existing destination. It verifies both checksums, versions, roles, pairing and SQLite integrity, copies to a private staging directory, rechecks the copied hashes, assigns a new pair/store identity, writes a new local anchor, then exclusively reserves the new directory and publishes its anchor last. An interrupted restore can leave an incomplete directory that cannot be opened; preserve it for review and retry only in a different new directory. Restore preserves the business state, approval digests, budget, attempts, effects, receipts and audit. Do not run the original and restored copy as two active controllers for the same business work; the new pair identity is not authorization to repeat an action.
+Restore never overwrites an existing destination. It accepts supported format-1 or format-2 backups, verifies both checksums, schema, roles, pairing and SQLite integrity, and copies to staging. After rechecking the copies and assigning a new pair identity, it reserves a new directory exclusively and publishes its anchor last. An interruption before publication leaves an incomplete pair that cannot be opened. Restore preserves intent data, caps, audit and dispatch records; format-2 approval terms are not renewed, and format-1 approvals require explicit review before new dispatch. Do not run the original and restored copies as two controllers for the same work.
 
 Original-adapter `executing` intents replay against their restored deduplication ledger. Queue `uncertain` intents remain non-dispatchable and require the same independent read-only reconciliation as before. Refused or ambiguous evidence never receives another debit or automatic resend.
 
@@ -87,3 +87,7 @@ The demo uses temporary directories, generated records and two real child-proces
 - `backup.json` checksums detect changed files, not a maliciously rewritten manifest. No signing key, external monotonic checkpoint or off-machine audit witness exists.
 - Offline backup/restore is tested for the two synthetic local services only. It cannot undo or recreate external effects, and restoring old runtime state against a live external service would require a separate reconciliation design. There is no general exactly-once guarantee.
 - This gate does not implement authentication, untrusted-plugin isolation, per-capability revocation, disk-full/power-loss validation, arbitrary legacy-data migration, or retention policy. The host API boundary remains cooperative.
+
+## Format-1 approval upgrade
+
+Run `node src/storage-cli.ts upgrade-approvals DIRECTORY --confirm-stopped-workers` only after preserving a complete backup with the prior release. It does not silently authorize existing old approvals. See [approval migration and snapshot limitations](APPROVALS.md).

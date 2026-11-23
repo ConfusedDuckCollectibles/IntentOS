@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { Runtime } from '../src/runtime.ts';
 import { StorePair, STORAGE_VERSION, adoptLegacyPair, backupPair, restorePair } from '../src/storage.ts';
 import { RUNTIME_SCHEMA, SERVICE_SCHEMA } from '../src/schema.ts';
@@ -19,6 +20,7 @@ function legacy(runtime:string,service:string,queueSchema=false) {
  const r=new DatabaseSync(runtime);const s=new DatabaseSync(service);
  try {
   r.exec(RUNTIME_SCHEMA);s.exec(SERVICE_SCHEMA);
+  r.exec('DROP TABLE approval_terms; DROP TABLE approval_revocations; DROP TABLE approval_clock;');
   if(!queueSchema){r.exec('DROP TABLE queue_attempts');s.exec('DROP TABLE queue_records; DROP TABLE queue_writes; DROP TABLE queue_source;');}
   r.prepare('INSERT INTO budget VALUES(1,12,0)').run();
   const payload=JSON.stringify(p),hash=digest({id:'one',action:'simulated.put',payload,cost:3,policy:1});
@@ -77,8 +79,8 @@ for(const queueSchema of [false,true]) test(`explicit legacy upgrade preserves a
  const f=setup(t);legacy(f.runtime,f.service,queueSchema);
  assert.throws(()=>new Runtime(f.runtime,f.service),/explicit legacy adoption/);
  const before=new DatabaseSync(f.runtime);const original=before.prepare('SELECT * FROM jobs').get();before.close();
- assert.equal(adoptLegacyPair(f.runtime,f.service).storageVersion,1);
- const r=new Runtime(f.runtime,f.service);try{assert.deepEqual(r.snapshot().jobs[0],original);assert.equal(r.checkAudit(),true);r.execute(r.actor('e','executor'),'one');assert.equal(r.verify(r.actor('v','verifier'),'one').state,'verified');assert.equal(r.snapshot().budget!.spent,3);}finally{r.close();}
+ assert.equal(adoptLegacyPair(f.runtime,f.service).storageVersion,STORAGE_VERSION);
+ const r=new Runtime(f.runtime,f.service);try{assert.deepEqual(r.snapshot().jobs[0],original);assert.equal(r.checkAudit(),true);assert.throws(()=>r.execute(r.actor('e','executor'),'one'),/Finite exact approval/);r.decide(r.actor('o','approver'),'one',String(original!.hash),true);r.execute(r.actor('e','executor'),'one');assert.equal(r.verify(r.actor('v','verifier'),'one').state,'verified');assert.equal(r.snapshot().budget!.spent,3);}finally{r.close();}
  assert.throws(()=>adoptLegacyPair(f.runtime,f.service),/versioned/);
 });
 for(const mutation of ['spend','executing','effect','attempt','bad-audit']) test(`legacy ${mutation} is refused without an adoption anchor`,t=>{
@@ -116,7 +118,7 @@ test('backup refuses an active writer, restore refuses modified or partial backu
 test('storage maintenance CLI checks, backs up, restores and checks a pair',t=>{
  const f=setup(t);new Runtime(f.runtime,f.service).close();const backup=join(f.root,'backup'),restored=join(f.root,'restored');
  for(const args of [['check',f.root],['backup',f.root,backup,'--confirm-stopped-workers'],['restore',backup,restored,'--confirm-stopped-workers'],['check',restored]]) {
-  const child=spawnSync(process.execPath,['src/storage-cli.ts',...args],{encoding:'utf8'});assert.equal(child.status,0,child.stderr);assert.equal(JSON.parse(child.stdout).storageVersion,1);
+  const child=spawnSync(process.execPath,['src/storage-cli.ts',...args],{encoding:'utf8'});assert.equal(child.status,0,child.stderr);assert.equal(JSON.parse(child.stdout).storageVersion,STORAGE_VERSION);
  }
 });
 
@@ -130,4 +132,16 @@ test('versioned stores refuse unexpected schema objects',t=>{
  const f=setup(t);new Runtime(f.runtime,f.service).close();
  sql(f.service,'CREATE INDEX unexpected ON queue_records(destination);');
  assert.throws(()=>new Runtime(f.runtime,f.service),/schema differs at unexpected/);
+});
+
+test('paired read-check waits out a short lock held by another process',async t=>{
+ const f=setup(t);new Runtime(f.runtime,f.service).close();
+ const held=spawn(process.execPath,['--input-type=module','-e',
+   "import {DatabaseSync} from 'node:sqlite'; const db=new DatabaseSync(process.argv[1]); db.exec('BEGIN EXCLUSIVE'); console.log('held'); setTimeout(()=>{db.exec('COMMIT');db.close()},200);",f.service],{stdio:['ignore','pipe','pipe']});
+ t.after(()=>{if(held.exitCode===null) held.kill();});
+ const ended=once(held,'close');
+ const signal=await Promise.race([once(held.stdout,'data').then(([data])=>String(data)),ended.then(([code])=>'worker closed '+code)]);
+ assert.match(signal,/held/);
+ new StorePair(f.runtime,f.service,12,false).assert();
+ assert.equal((await ended)[0],0);
 });

@@ -1,10 +1,11 @@
 import { Runtime } from './runtime.ts';
 import type { IntentView, PlannerCapability, ScopedReader, VerifierCapability } from './agents.ts';
-import type { Actor } from './runtime.ts';
+import type { Actor, ApprovalPolicy } from './runtime.ts';
 
 // These are host/operator interfaces, never agent interfaces.
 export interface OperatorCapability extends ScopedReader {
-  decide(id: string, expectedHash: string, allow: boolean): IntentView;
+  decide(id: string, expectedHash: string, allow: boolean, lifetimeMs?: number): IntentView;
+  revoke(id: string, expectedHash: string): IntentView;
 }
 export interface ExecutorCapability extends ScopedReader {
   execute(id: string): IntentView;
@@ -12,7 +13,8 @@ export interface ExecutorCapability extends ScopedReader {
 }
 const view = (row: any): IntentView => Object.freeze({
   id: row.id, payload: row.payload, hash: row.hash, state: row.state, cost: row.cost,
-  approval: row.approval, receipt: row.receipt, evidence: row.evidence
+  approval: row.approval, receipt: row.receipt, evidence: row.evidence,
+  approvalExpiresAt: row.approvalExpiresAt ?? null, approvalRevokedAt: row.approvalRevokedAt ?? null, dispatchClaimedAt: row.dispatchClaimedAt ?? null
 });
 const views = (rows: any[]): readonly IntentView[] => Object.freeze(rows.map(view));
 
@@ -33,8 +35,8 @@ function capability<T>(methods: Record<string, (...args: any[]) => unknown>): T 
 export class IntentHost {
   #runtime: Runtime;
   #closed = false;
-  constructor(runtimePath: string, servicePath: string, cap = 12) {
-    this.#runtime = new Runtime(runtimePath,servicePath,cap);
+  constructor(runtimePath: string, servicePath: string, cap = 12, policy: ApprovalPolicy = {}) {
+    this.#runtime = new Runtime(runtimePath,servicePath,cap,policy);
   }
   #active() { if (this.#closed) throw Error('Host closed'); }
   #actor(id: string, role: Actor['role'], prefix: string): Actor {
@@ -60,8 +62,10 @@ export class IntentHost {
   }
   operator(id: string, prefix = 'demo/'): OperatorCapability {
     const a = this.#actor(id,'approver',prefix);
-    return capability({ ...this.#reader(a), decide: (id: string, hash: string, allow: boolean) => {
-      this.#active(); this.#runtime.get(a,id); return view(this.#runtime.decide(a,id,hash,allow));
+    return capability({ ...this.#reader(a), decide: (id: string, hash: string, allow: boolean, lifetimeMs?: number) => {
+      this.#active(); this.#runtime.get(a,id); return view(this.#runtime.decide(a,id,hash,allow,lifetimeMs));
+    }, revoke: (id: string, hash: string) => {
+      this.#active();this.#runtime.get(a,id);return view(this.#runtime.revoke(a,id,hash));
     } });
   }
   executor(id: string, prefix = 'demo/'): ExecutorCapability {

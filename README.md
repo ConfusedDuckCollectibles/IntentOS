@@ -6,6 +6,10 @@
 
 **IntentOS helps you stay in control of what AI does on your behalf.** It checks what you approved before anything happens, then checks the result so you know whether it worked.
 
+**1.0.0-rc.1 · trusted-local release candidate · Linux / Node 24.22.3 verification target**
+
+[Install and verify](docs/INSTALL.md) · [Public API](docs/PUBLIC-API.md) · [CLI reference](docs/CLI.md) · [Recovery guide](docs/STORAGE.md) · [Release gates](docs/RELEASE.md)
+
 ## How it works
 
 **Imagine asking AI to schedule a post for your shop.**
@@ -52,6 +56,18 @@ npm run demo:queue   # check the same saved result; don't send again
 
 [See the recovery contract and test coverage](docs/QUEUE-RECOVERY.md).
 
+## Permission doesn’t last forever
+
+**You approve a pretend post, then change your mind before it starts.** You can now withdraw that approval. Approvals also expire: five minutes by default, or a shorter or longer window you choose, up to one day. An expired or withdrawn approval stops before a new dispatch and costs no pretend credits.
+
+You can also withdraw permission if the local clock goes wrong; that fallback is recorded for review. If the system already recorded the dispatch, withdrawing permission cannot undo it. IntentOS keeps that history and checks what happened—without sending an uncertain post again.
+
+```sh
+npm run demo:approvals
+```
+
+[See approval deadlines, withdrawal and upgrade instructions](docs/APPROVALS.md). This remains a trusted local demo, not a login system or a live publishing connection.
+
 ## Keep the right saved records together
 
 IntentOS keeps two local records: what you approved, and what the pretend service actually did. It now checks that those files belong together before continuing. If one is missing, replaced, or from a newer version, it stops instead of risking another write or showing the wrong proof.
@@ -64,7 +80,7 @@ npm run demo:storage
 
 This offline demo loses two replies, backs up the stopped system, restores both records, and confirms there was still only one write per action. [See the backup, restore and upgrade guide](docs/STORAGE.md).
 
-*Older demo state is not silently upgraded. Untouched legacy plans can be adopted explicitly; previously dispatched legacy work needs manual review. Backup and restore require stopped workers and a complete pair of files.*
+*Older demo state is not silently upgraded. Untouched unversioned plans can be adopted explicitly; previously dispatched unversioned work needs manual review. Format-1 stores require an explicit format-2 upgrade, and old approvals need review before a new dispatch. Backup and restore require stopped workers and a complete pair of files.*
 
 ## Try it on your computer
 
@@ -78,9 +94,9 @@ npm test
 
 The demo's built-in approval is for a harmless, fixed fixture. Use the manual flow below to approve a proposal yourself. Local demo state lives in `.intentos/`, which is ignored by Git.
 
-## What the MVP does
+## What this candidate does
 
-| What you want | What the MVP demonstrates |
+| What you want | What the candidate demonstrates |
 | --- | --- |
 | **Control what runs** | Planner and verifier agents get only their own scoped controls. Approval and execution stay with the trusted host. Approval is tied to the exact action, payload, cost, and policy version. |
 | **Stay within a cap** | The runtime checks and charges a fixed cost against a persistent pool of simulated credits before it dispatches the write. |
@@ -101,20 +117,20 @@ The planner can submit proposals in its assigned scope. The verifier can check s
 node src/cli.ts propose .intentos/manual task1 'Draft release notes'
 # Review the payload and cost, then copy the hash printed above.
 HASH='paste-the-displayed-hash-here'
-node src/cli.ts approve .intentos/manual task1 "$HASH"
+node src/cli.ts approve .intentos/manual task1 "$HASH" 300  # valid for five minutes
 node src/cli.ts execute .intentos/manual task1
 node src/cli.ts verify .intentos/manual task1
 node src/cli.ts status .intentos/manual
 ```
 
-Use `deny` instead of `approve` to reject a proposal. Use `recover` with the same state directory to resume the original simulator, then verify the result. For the new queue, recovery reports an uncertain attempt without resending; `verify` checks its evidence. See the [architecture](docs/ARCHITECTURE.md) for guarantees and failure modes.
+Use `deny` instead of `approve` to reject a proposal. Use `revoke <id> <hash>` to withdraw an approval before dispatch; it cannot undo already-dispatched work. Use `recover` with the same state directory to resume the original simulator, then verify the result. For the new queue, recovery reports an uncertain attempt without resending; `verify` checks its evidence. See the [architecture](docs/ARCHITECTURE.md) for guarantees and failure modes.
 
 ## What’s ready, and what’s next
 
-**Ready to try:** An offline CLI, two offline simulated adapters, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. For development, run `npm ci --ignore-scripts --no-audit --no-fund` and `npm run typecheck`. CI runs the tests and all three offline demos without deploying.
+**Ready to try:** An offline CLI, two offline simulated adapters, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. For development, run `npm ci --ignore-scripts --no-audit --no-fund` and `npm run typecheck`. CI is configured to run tests and all four offline demos without deploying. Exact candidate checks must pass before release; local success alone is not certification.
 
-**Not production-ready:** The CLI trusts its local operator and host. Agent capabilities are an application API boundary, not isolation from other Node.js code. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
+**Bounded local scope:** The CLI trusts its local operator and host. Agent capabilities are an application API boundary, not isolation from other Node.js code. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
 
 **New for developers:** [Read how uncertain writes are reconciled](docs/QUEUE-RECOVERY.md). Paired-store checks and offline backup/restore are now included. Live connectors, authenticated operators, hostile-host protection, and broader failure testing remain future work.
 
-[Read the design](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md) · [MIT license](LICENSE) · [Competitive notes and working name](docs/COMPETITIVE-NOTES.md)
+[Changelog](CHANGELOG.md) · [Security boundary](SECURITY.md) · [Read the design](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md) · [MIT license](LICENSE) · [Competitive notes and working name](docs/COMPETITIVE-NOTES.md)
