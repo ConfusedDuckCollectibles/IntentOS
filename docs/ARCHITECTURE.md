@@ -8,7 +8,7 @@ The CLI is the trusted composition root. It passes separate capabilities into of
 
 This is a cooperative application API boundary, not a JavaScript or OS sandbox, identity provider or multi-user service. The host must trust module loading, provisioning, authentication, execution scheduling and storage access. Arbitrary Node code with imports/OS access can instantiate the lower-level host-only Runtime or access databases directly. Actor IDs are audit labels, not authenticated identities. Capability references can be deliberately delegated. Scope isolates returned intent data but global ID conflicts can reveal occupancy; there is no tenant-level metadata isolation. No third-party code is loaded by the demo.
 
-## State machine
+## Original simulated adapter state machine
 
 ```mermaid
 stateDiagram-v2
@@ -24,7 +24,7 @@ stateDiagram-v2
 
 Denied and failed are terminal. Budget exhaustion leaves an approved intent unexecuted, with a denial audit entry. There is no mutable proposal or automatic escalation. A transient adapter error leaves executing work available for explicit recovery. A verifier read error leaves applied work available for retry; a confirmed evidence mismatch becomes failed. Failed evidence is never automatically repaired or hidden.
 
-## Transaction and crash protocol
+## Original simulated adapter transaction and crash protocol
 
 1. A runtime transaction checks actor role/scope, exact approval and remaining budget, charges 3 credits, records `executing` and the audit event, then commits.
 2. The simulated service opens its own database transaction and inserts `(token, payload, receipt)` only if the token is absent. Existing tokens must match payload exactly.
@@ -46,3 +46,7 @@ Durability relies on SQLite, the local filesystem, and storage honoring synchron
 The crash switches on `execute` intentionally call `process.exit` for test fault injection and must not be exposed to untrusted callers. A provider response is treated as untrusted input and strictly schema-validated; semantic accuracy of arbitrary model prose is outside the verifier's guarantee. Verification proves the requested simulated effect was recorded, not that the user's broader business objective was correct.
 
 The runtime does not yet bind a persisted service-store identity. Keep the original runtime/service database pair at the same paths throughout restart and recovery. Replacing, deleting, restoring only one side, or repointing the service store is unsupported and can invalidate idempotency guarantees. Introduce a persisted service identity and coordinated restore protocol before external adapters. Demo auto-approval is fixture setup, not evidence of human authentication or consent in a deployed system.
+
+## Queue adapter: uncertain outcome branch
+
+The second offline adapter is a synthetic publishing queue without backend deduplication. It shares exact approvals, scoped capabilities, conservative integer budget and audit with the original adapter, but never replays a dispatch. Its additive `queue_attempts` table records the authorized attempt before writing. State moves `approved → uncertain → applied` when an acknowledgment arrives; a lost acknowledgment stays `uncertain`. Independent verifier read-back can move `uncertain` or `applied` to `verified` only with one conclusive record. Missing/ambiguous/stale/unavailable/mismatched reads remain `uncertain` for human review. No automatic resend or refund is permitted. See [queue recovery](QUEUE-RECOVERY.md) for the contract, runnable demo, draft-transition evidence and limits.
