@@ -1,0 +1,14 @@
+export const APPROVAL_SCHEMA = `CREATE TABLE IF NOT EXISTS approval_terms(id TEXT PRIMARY KEY, hash TEXT NOT NULL, approved_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, claimed_at INTEGER);
+CREATE TABLE IF NOT EXISTS approval_revocations(id TEXT PRIMARY KEY, hash TEXT NOT NULL, revoked_at INTEGER NOT NULL, actor TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS approval_clock(id INTEGER PRIMARY KEY CHECK(id=1), last_ms INTEGER NOT NULL);
+INSERT OR IGNORE INTO approval_clock VALUES(1,0);`;
+export const RUNTIME_SCHEMA = `${APPROVAL_SCHEMA}
+CREATE TABLE IF NOT EXISTS budget (id INTEGER PRIMARY KEY CHECK(id=1), cap INTEGER NOT NULL, spent INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL, hash TEXT NOT NULL, state TEXT NOT NULL, cost INTEGER NOT NULL, approval TEXT, receipt TEXT, evidence TEXT);
+      CREATE TABLE IF NOT EXISTS queue_attempts(id TEXT PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, destination TEXT NOT NULL, intent_hash TEXT NOT NULL, acknowledged_record_id TEXT);
+      CREATE TABLE IF NOT EXISTS audit (seq INTEGER PRIMARY KEY, actor TEXT NOT NULL, event TEXT NOT NULL, detail TEXT NOT NULL, previous TEXT NOT NULL, hash TEXT NOT NULL);`;
+export const SERVICE_SCHEMA = `CREATE TABLE IF NOT EXISTS effects (token TEXT PRIMARY KEY, payload TEXT NOT NULL, receipt TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS queue_records(id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, intent_hash TEXT NOT NULL, destination TEXT NOT NULL, asset_fingerprint TEXT NOT NULL, due_at TEXT NOT NULL, status TEXT NOT NULL, sent_receipt TEXT);
+      CREATE TABLE IF NOT EXISTS queue_writes(seq INTEGER PRIMARY KEY, operation_id TEXT NOT NULL, record_id TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS queue_source(id INTEGER PRIMARY KEY CHECK(id=1), authoritative INTEGER NOT NULL, fresh INTEGER NOT NULL);
+      INSERT OR IGNORE INTO queue_source VALUES(1,1,1);`;

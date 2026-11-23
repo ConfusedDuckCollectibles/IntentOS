@@ -1,33 +1,62 @@
+import { runQueueDemo } from './queue-demo.ts';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Runtime } from './runtime.ts';
-import { OfflinePlanner } from './adapters.ts';
-const [command = 'help', directory = '.intentos', ...args] = process.argv.slice(2);
-if (command === 'help') {
-  console.log(`IntentOS — offline simulated runtime (Node 24+)\nCommands: node src/cli.ts <command> <state-directory> [arguments]\n  demo                     propose, explicitly approve, execute, verify a fixed demo\n  propose <id> <text>       propose a simulated demo/result write\n  approve <id> <hash>       approve the exact displayed digest\n  deny <id> <hash>          reject the exact displayed digest\n  execute <id>             perform an approved simulated operation\n  verify <id>              independently read back evidence\n  recover                  replay interrupted executions\n  status                   inspect state and audit integrity\nThis local CLI is a trusted operator interface; it is not user authentication.`);
+import { IntentHost, VERSION } from './index.ts';
+import { checkStores } from './storage-api.ts';
+import { planOffline, verifyOffline } from './demo-agents.ts';
+const argv=process.argv.slice(2);
+const [command='help',directory='.intentos',...args]=argv;
+const usage = `IntentOS ${VERSION} — trusted-local offline runtime (Node 24+)
+Commands: node src/cli.ts <command> <state-directory> [arguments]
+  help | --help            show commands
+  --version                show release version
+  demo                     propose, fixture-approve, execute and verify a fixed intent
+  queue-demo               crash after a pretend write, reconcile without resend
+  propose <id> <text>       propose a simulated demo/result write
+  approve <id> <hash> [ttl-seconds] approve exact digest; default five minutes
+  revoke <id> <hash>        withdraw before dispatch; cannot undo a dispatch
+  deny <id> <hash>          reject an exact proposal
+  execute <id>             perform an approved simulated operation
+  verify <id>              independently read back evidence
+  recover                  recover original writes; report uncertain queue work
+  status                   inspect state and audit integrity
+Exit codes: 0 completed, 1 refused/failed/unresolved, 2 invalid usage.
+This local CLI trusts its operator; it is not user authentication.`;
+const arities:Record<string,[number,number]>={demo:[0,0],'queue-demo':[0,0],propose:[2,2],approve:[2,3],revoke:[2,2],deny:[2,2],execute:[1,1],verify:[1,1],recover:[0,0],status:[0,0]};
+const usageError=()=>{console.error(usage);process.exitCode=2;};
+if(['help','--help','--version'].includes(command)) {
+  if(argv.length>1)usageError();else console.log(command==='--version'?VERSION:usage);
+} else if(!Object.hasOwn(arities,command) || (argv.length<2 && !['demo','queue-demo'].includes(command)) || args.length<arities[command][0] || args.length>arities[command][1]) {
+  usageError();
+} else if(command==='approve' && args[2]!==undefined && (!/^\d+(?:\.\d+)?$/.test(args[2]) || !Number.isSafeInteger(Number(args[2])*1000) || Number(args[2])*1000<1 || Number(args[2])>86400)) {
+  usageError();
 } else {
-  mkdirSync(directory,{recursive:true});
-  const r = new Runtime(resolve(directory,'runtime.sqlite'),resolve(directory,'service.sqlite'));
-  const planner = r.actor('planner','planner'), approver = r.actor('operator','approver');
-  const executor = r.actor('executor','executor'), verifier = r.actor('verifier','verifier');
+  let host:IntentHost|undefined;
   try {
-    let result: unknown;
-    switch(command) {
-      case 'demo': {
-        const p = await new OfflinePlanner().propose('Hello from collaborating scoped actors');
-        const j: any = r.propose(planner,'hello',p);
-        if (j.state === 'pending') r.decide(approver,j.id,j.hash,true);
-        r.execute(executor,j.id); result = r.verify(verifier,j.id); break;
+    let result:unknown;
+    if(command==='queue-demo')result=runQueueDemo(directory);
+    else {
+      const state=resolve(directory,'runtime.sqlite'),service=resolve(directory,'service.sqlite');
+      if(['demo','propose'].includes(command))mkdirSync(directory,{recursive:true});else checkStores(state,service);
+      host=new IntentHost(state,service);
+      const planner=host.planner('planner'),operator=host.operator('operator'),executor=host.executor('executor'),verifier=host.verifier('verifier');
+      switch(command) {
+        case 'demo': {
+          const j=await planOffline(planner,'hello','Hello from collaborating scoped actors');
+          if(j.state==='pending')operator.decide(j.id,j.hash,true);
+          executor.execute(j.id);result=verifyOffline(verifier,j.id);break;
+        }
+        case 'propose':result=await planOffline(planner,args[0],args[1]);break;
+        case 'approve':case 'deny':result=operator.decide(args[0],args[1],command==='approve',args[2]===undefined?undefined:Number(args[2])*1000);break;
+        case 'revoke':result=operator.revoke(args[0],args[1]);break;
+        case 'execute':result=executor.execute(args[0]);break;
+        case 'verify':result=verifyOffline(verifier,args[0]);break;
+        case 'recover':result=executor.recover();break;
+        case 'status':result=host.inspect();break;
       }
-      case 'propose': result = r.propose(planner,args[0],await new OfflinePlanner().propose(args[1])); break;
-      case 'approve': case 'deny': result = r.decide(approver,args[0],args[1],command === 'approve'); break;
-      case 'execute': result = r.execute(executor,args[0]); break;
-      case 'verify': result = r.verify(verifier,args[0]); break;
-      case 'recover': result = r.recover(executor); break;
-      case 'status': result = { ...r.snapshot(), auditValid: r.checkAudit() }; break;
-      default: throw Error('Unknown command; run help');
     }
     console.log(JSON.stringify(result,null,2));
-    if (result && typeof result === 'object' && 'state' in result && result.state === 'failed') process.exitCode = 1;
-  } catch(e) { console.error(String(e)); process.exitCode = 1; } finally { r.close(); }
+    const unresolved=(value:unknown):boolean=>!!value && typeof value==='object' && 'state' in value && ['failed','uncertain'].includes(String(value.state));
+    if(unresolved(result) || (Array.isArray(result) && result.some(unresolved)) || (result && typeof result==='object' && 'auditValid' in result && result.auditValid===false))process.exitCode=1;
+  }catch(error){console.error(String(error));process.exitCode=1;}finally{host?.close();}
 }

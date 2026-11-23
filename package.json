@@ -1,7 +1,39 @@
 {
-  "name": "intentos", "version": "0.1.0", "private": true,
+  "name": "intentos",
+  "version": "1.0.0-rc.1",
+  "private": true,
   "description": "A local, model-independent intent runtime with scoped actors and verified simulated outcomes",
-  "type": "module", "engines": {"node": ">=24.0.0"},
-  "scripts": {"test": "node --test test/*.test.ts", "demo": "node src/cli.ts demo", "start": "node src/cli.ts"},
-  "license": "MIT"
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "demo": "node src/cli.ts demo",
+    "start": "node src/cli.ts",
+    "demo:queue": "node src/cli.ts queue-demo",
+    "demo:storage": "node src/storage-demo.ts",
+    "demo:approvals": "node src/approval-demo.ts",
+    "typecheck": "tsc --project tsconfig.json",
+    "verify": "npm run typecheck && npm test"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./agents": {
+      "types": "./src/agents.ts",
+      "default": "./src/agents.ts"
+    },
+    "./storage": {
+      "types": "./src/storage-api.ts",
+      "default": "./src/storage-api.ts"
+    }
+  }
 }

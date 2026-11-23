@@ -1,5 +1,5 @@
-import { validateProposal } from './runtime.ts';
-import type { Proposal } from './runtime.ts';
+import { validateProposal } from './proposal.ts';
+import type { Proposal } from './proposal.ts';
 export interface Planner { propose(intent: string): Promise<Proposal> }
 export class OfflinePlanner implements Planner {
   async propose(intent: string): Promise<Proposal> { return validateProposal({ key: 'demo/result', value: intent }); }
