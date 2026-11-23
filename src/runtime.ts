@@ -1,3 +1,4 @@
+import { PublishingQueue, validateQueueProposal, queueOperationId, readQueueEvidence, assessQueueEvidence } from './queue.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 
@@ -42,6 +43,7 @@ export class Runtime {
     this.#db = open(path); this.#servicePath = servicePath;
     this.#db.exec(`CREATE TABLE IF NOT EXISTS budget (id INTEGER PRIMARY KEY CHECK(id=1), cap INTEGER NOT NULL, spent INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL, hash TEXT NOT NULL, state TEXT NOT NULL, cost INTEGER NOT NULL, approval TEXT, receipt TEXT, evidence TEXT);
+      CREATE TABLE IF NOT EXISTS queue_attempts(id TEXT PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, destination TEXT NOT NULL, intent_hash TEXT NOT NULL, acknowledged_record_id TEXT);
       CREATE TABLE IF NOT EXISTS audit (seq INTEGER PRIMARY KEY, actor TEXT NOT NULL, event TEXT NOT NULL, detail TEXT NOT NULL, previous TEXT NOT NULL, hash TEXT NOT NULL);`);
     this.#db.prepare('INSERT OR IGNORE INTO budget VALUES (1,?,0)').run(cap);
     // Existing databases retain their original cap; reopening cannot increase it.
@@ -77,10 +79,11 @@ export class Runtime {
   }
   propose(a: Actor, id: string, input: unknown) {
     return this.#tx(a, 'propose', () => {
-      const p = validateProposal(input); this.#auth(a,'planner',p.key);
+      const action = input && typeof input === 'object' ? Object.getOwnPropertyDescriptor(input,'action') : undefined;
+      const p = action ? validateQueueProposal(input) : validateProposal(input); this.#auth(a,'planner',p.key);
       if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) throw Error('Invalid intent id');
       const payload = JSON.stringify(p);
-      const hash = digest({ id, action: 'simulated.put', payload, cost: 3, policy: 1 });
+      const hash = digest({ id, action: 'action' in p ? p.action : 'simulated.put', payload, cost: 3, policy: 1 });
       const old = this.#db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
       if (old) { if (old.hash !== hash) throw Error('Idempotency conflict'); return old; }
       this.#db.prepare("INSERT INTO jobs(id,payload,hash,state,cost) VALUES (?,?,?,'pending',3)").run(id,payload,hash);
@@ -95,7 +98,9 @@ export class Runtime {
       this.#event(a.id,allow ? 'approved' : 'rejected',{ id, hash: expectedHash }); return this.#job(id);
     });
   }
-  execute(a: Actor, id: string, crash?: 'before-effect' | 'after-effect' | 'before-commit') {
+  execute(a: Actor, id: string, crash?: 'before-effect' | 'after-effect' | 'before-commit' | 'lose-response') {
+    const candidate = this.get(a,id);
+    if (JSON.parse(String(candidate.payload)).action) return this.#executeQueue(a,id,crash);
     const j = this.#tx(a,'execute',() => {
       const j = this.#job(id); this.#auth(a,'executor',JSON.parse(j.payload).key);
       if (['applied','verified'].includes(j.state)) return j;
@@ -128,6 +133,7 @@ export class Runtime {
     return this.#tx(a,'verify',() => {
       const j = this.#job(id); this.#auth(a,'verifier',JSON.parse(j.payload).key);
       if (j.state === 'verified') return j;
+      if (JSON.parse(j.payload).action) return this.#reconcileQueue(a,j);
       if (j.state !== 'applied') throw Error('Intent is not applied');
       // Separate read-only connection. Executor success text is not evidence.
       const reader = new DatabaseSync(this.#servicePath, { readOnly: true });
@@ -141,8 +147,60 @@ export class Runtime {
   }
   recover(a: Actor) {
     this.#tx(a, 'recover', () => this.#auth(a, 'executor', a.prefix));
-    const ids = this.#db.prepare("SELECT id,payload FROM jobs WHERE state='executing' ORDER BY id").all();
+    const ids = this.#db.prepare("SELECT id,payload FROM jobs WHERE state IN ('executing','uncertain') ORDER BY id").all();
     return ids.filter(j => JSON.parse(String(j.payload)).key.startsWith(a.prefix)).map(j => this.execute(a,String(j.id)));
+  }
+  #executeQueue(a: Actor, id: string, fault?: string) {
+    // Only the transaction which inserts the attempt may dispatch. State alone is never permission to resend.
+    const prepared = this.#tx(a,'queue-dispatch',() => {
+      const j=this.#job(id); const p=validateQueueProposal(JSON.parse(j.payload)); this.#auth(a,'executor',p.key);
+      if (['uncertain','applied','verified'].includes(j.state)) return {job:j,dispatch:false};
+      if (j.state !== 'approved' || j.approval !== j.hash) throw Error('Exact approval required');
+      const b:any=this.#db.prepare('SELECT * FROM budget WHERE id=1').get();
+      if (j.cost > b.cap-b.spent) throw Error('Budget exceeded');
+      const operationId=queueOperationId(p.key,j.hash);
+      this.#db.prepare('INSERT INTO queue_attempts(id,operation_id,destination,intent_hash) VALUES(?,?,?,?)').run(id,operationId,p.key,j.hash);
+      this.#db.prepare('UPDATE budget SET spent=spent+? WHERE id=1').run(j.cost);
+      this.#db.prepare("UPDATE jobs SET state='uncertain' WHERE id=?").run(id);
+      this.#event(a.id,'queue-dispatch-intent',{id,operationId,destination:p.key,cost:j.cost});
+      return {job:this.#job(id),dispatch:true};
+    });
+    if (!prepared.dispatch) return prepared.job;
+    if (fault==='before-effect') process.exit(71);
+    let receipt: string;
+    try {
+      const service=new PublishingQueue(this.#servicePath);
+      try { const p=validateQueueProposal(JSON.parse(prepared.job.payload)); receipt=service.write(queueOperationId(p.key,prepared.job.hash),prepared.job.hash,p,fault==='lose-response'); }
+      finally {service.close();}
+    } catch {
+      return this.#tx(a,'queue-unknown',()=>{this.#event(a.id,'queue-outcome-unknown',{id});return this.#job(id);});
+    }
+    if (fault==='after-effect') process.exit(72);
+    return this.#tx(a,'queue-acknowledge',()=>{
+      const current=this.#job(id);
+      if (current.state !== 'uncertain') return current;
+      this.#db.prepare('UPDATE queue_attempts SET acknowledged_record_id=? WHERE id=?').run(receipt,id);
+      this.#db.prepare("UPDATE jobs SET state='applied',receipt=? WHERE id=?").run(receipt,id);
+      this.#event(a.id,'queue-acknowledged',{id,recordId:receipt});
+      if (fault==='before-commit') process.exit(73);
+      return this.#job(id);
+    });
+  }
+  #reconcileQueue(a: Actor, j: any) {
+    if (!['uncertain','applied'].includes(j.state)) throw Error('Intent has no dispatch attempt');
+    const p=validateQueueProposal(JSON.parse(j.payload));
+    const operationId=queueOperationId(p.key,j.hash);
+    const attempt=this.#db.prepare('SELECT * FROM queue_attempts WHERE id=?').get(j.id);
+    if (!attempt || attempt.operation_id!==operationId || attempt.destination!==p.key || attempt.intent_hash!==j.hash || j.approval!==j.hash) throw Error('Invalid dispatch authorization');
+    const observed=readQueueEvidence(this.#servicePath,operationId);
+    const assessment=assessQueueEvidence(p,j.hash,operationId,observed);
+    if (assessment.matched && attempt.acknowledged_record_id !== null && attempt.acknowledged_record_id !== observed.records[0].id) {assessment.matched=false;assessment.reason='acknowledged-record-mismatch';}
+    // Only evidence from the exact destination/operation is retained in this scope's view.
+    const evidence=JSON.stringify({operationId,matched:assessment.matched,reason:assessment.reason,candidateCount:observed.records.length,
+      requiresHumanReview:!assessment.matched,record:assessment.matched?observed.records[0]:null});
+    this.#db.prepare('UPDATE jobs SET state=?,evidence=?,receipt=? WHERE id=?').run(assessment.matched?'verified':'uncertain',evidence,assessment.matched?observed.records[0].id:null,j.id);
+    this.#event(a.id,assessment.matched?'queue-verified':'queue-review-required',{id:j.id,evidence});
+    return this.#job(j.id);
   }
   // Host-only primitives used by the narrow capability facade. Never return a full snapshot.
   get(a: Actor, id: string) {

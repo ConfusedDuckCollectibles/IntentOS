@@ -10,3 +10,7 @@
 8. **Human interface.** Add a Vue 3 read-only audit/approval review UI only after authentication and exact approval semantics are implemented. Acceptance: the UI shows precise action, cost, scope and digest and cannot broaden a reviewed intent.
 
 Keep the default path offline. Defer autonomous shell execution, broad network connectors, real payments, deployment and multi-tenant hosting until their threat models and approvals are independently reviewed.
+
+## Implemented next slice: issue #2
+
+The second offline connector is a non-deduplicating publishing queue with durable dispatch reservation, one conservative debit, independent read-only reconciliation, unresolved human-review state, and known-draft evidence checks. Tests cover actual process loss after commit, competing dispatchers, missing/ambiguous/stale evidence and false positives. See [queue recovery](QUEUE-RECOVERY.md). Remaining connector work: authenticated source contracts, persistent service identity, coordinated backup/restore, tenant namespace handling, and explicit operator remediation. No live connector or general exactly-once guarantee is implied.
