@@ -11,7 +11,12 @@
     "test": "node --test test/*.test.ts",
     "demo": "node src/cli.ts demo",
     "start": "node src/cli.ts",
-    "demo:queue": "node src/cli.ts queue-demo"
+    "demo:queue": "node src/cli.ts queue-demo",
+    "typecheck": "tsc --project tsconfig.json"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3"
+  }
 }
