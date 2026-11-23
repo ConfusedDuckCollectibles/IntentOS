@@ -54,7 +54,7 @@ npm run demo:queue   # check the same saved result; don't send again
 
 ## Try it on your computer
 
-With **Node.js 24+**, clone this repo and run the following in the checkout. No install, account, API key, or network call required once you're in the repo.
+With **Node.js 24+**, clone this repo and run the following in the checkout. The demos and tests need no install, account, API key, or network call once you're in the repo.
 
 ```sh
 npm run demo
@@ -97,7 +97,7 @@ Use `deny` instead of `approve` to reject a proposal. Use `recover` with the sam
 
 ## What’s ready, and what’s next
 
-**Ready to try:** An offline CLI, two offline simulated adapters, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. Tests run with Node's native TypeScript support; static type checking is not configured yet.
+**Ready to try:** An offline CLI, two offline simulated adapters, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. For development, pinned tooling adds a separate static check: run `npm ci --ignore-scripts --no-audit --no-fund` and then `npm run typecheck`. The CI workflow also runs the tests and both demos; it does not deploy.
 
 **Not production-ready:** The CLI trusts its local operator and host. Agent capabilities are an application API boundary, not isolation from other Node.js code. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
 
