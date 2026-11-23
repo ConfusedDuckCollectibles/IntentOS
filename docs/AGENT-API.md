@@ -60,3 +60,7 @@ Read denials through the runtime use the existing denial audit path. Invalid fac
 ## Offline queue proposals
 
 The same planner `propose` and verifier `verify` capabilities now support the strict `queue.create` and `queue.draft` proposals documented in [queue recovery](QUEUE-RECOVERY.md). The proposal's `key` remains the exact destination and scope key. Agent surfaces are unchanged: no connector, dispatch or fault-injection handles are exposed. Queue verification reconciles an uncertain write via independent evidence. Executor recovery never resends a queue attempt. Inconclusive evidence remains `uncertain` with `requiresHumanReview` in its serialized evidence; it is not a successful verification. The host must present that unresolved result clearly to the operator.
+
+## Storage is a host responsibility
+
+Agents receive no storage-maintenance handles. The host owns versioned store initialization, explicit legacy adoption and stopped-worker backup/restore. A storage refusal must be shown to the operator and must not trigger creating a replacement database or reissuing the intent. See [storage](STORAGE.md).

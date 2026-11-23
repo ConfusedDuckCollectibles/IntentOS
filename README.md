@@ -52,9 +52,23 @@ npm run demo:queue   # check the same saved result; don't send again
 
 [See the recovery contract and test coverage](docs/QUEUE-RECOVERY.md).
 
+## Keep the right saved records together
+
+IntentOS keeps two local records: what you approved, and what the pretend service actually did. It now checks that those files belong together before continuing. If one is missing, replaced, or from a newer version, it stops instead of risking another write or showing the wrong proof.
+
+```sh
+npm run demo:storage
+```
+
+![Offline backup demo: two interrupted actions were confirmed after restoring both records, without repeating either action or charge.](docs/assets/storage-restore.png)
+
+This offline demo loses two replies, backs up the stopped system, restores both records, and confirms there was still only one write per action. [See the backup, restore and upgrade guide](docs/STORAGE.md).
+
+*Older demo state is not silently upgraded. Untouched legacy plans can be adopted explicitly; previously dispatched legacy work needs manual review. Backup and restore require stopped workers and a complete pair of files.*
+
 ## Try it on your computer
 
-With **Node.js 24+**, clone this repo and run the following in the checkout. The demos and tests need no install, account, API key, or network call once you're in the repo.
+With **Node.js 24+**, clone this repo and run the following in the checkout. The demos and tests need no install, account, API key, or network call once you're in the repo. If you have state from an older build, read the [upgrade guide](docs/STORAGE.md) first or choose a new empty demo directory.
 
 ```sh
 npm run demo
@@ -97,10 +111,10 @@ Use `deny` instead of `approve` to reject a proposal. Use `recover` with the sam
 
 ## What’s ready, and what’s next
 
-**Ready to try:** An offline CLI, two offline simulated adapters, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. For development, pinned tooling adds a separate static check: run `npm ci --ignore-scripts --no-audit --no-fund` and then `npm run typecheck`. The CI workflow also runs the tests and both demos; it does not deploy.
+**Ready to try:** An offline CLI, two offline simulated adapters, SQLite persistence, and tests for approval, budgets, crash recovery, and independent verification. `npm test` runs without network. For development, run `npm ci --ignore-scripts --no-audit --no-fund` and `npm run typecheck`. CI runs the tests and all three offline demos without deploying.
 
 **Not production-ready:** The CLI trusts its local operator and host. Agent capabilities are an application API boundary, not isolation from other Node.js code. It is not a sandbox for untrusted code, does not use real money, and does not promise exactly-once effects for other services. Live model calls are not part of this demo.
 
-**New for developers:** [Read how uncertain writes are reconciled](docs/QUEUE-RECOVERY.md). Live connectors, authenticated operators, and stronger storage recovery remain future work.
+**New for developers:** [Read how uncertain writes are reconciled](docs/QUEUE-RECOVERY.md). Paired-store checks and offline backup/restore are now included. Live connectors, authenticated operators, hostile-host protection, and broader failure testing remain future work.
 
 [Read the design](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md) · [MIT license](LICENSE) · [Competitive notes and working name](docs/COMPETITIVE-NOTES.md)

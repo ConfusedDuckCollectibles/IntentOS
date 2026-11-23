@@ -78,7 +78,8 @@ test('acknowledged stable ID remains binding across repeated inconclusive reads'
 });
 test('unavailable source remains reviewable; restoration can reconcile without dispatch',t=>{
  const f=setup(t);f.approve();f.r.execute(f.e,'one','lose-response');renameSync(f.service,`${f.service}.saved`);
- assert.equal(JSON.parse(f.r.verify(f.v,'one').evidence).reason,'read-unavailable');f.r.execute(f.e,'one');
+ assert.throws(()=>f.r.verify(f.v,'one'),/Storage refused: missing paired store/);
+ assert.throws(()=>f.r.execute(f.e,'one'),/Storage refused: missing paired store/);
  renameSync(`${f.service}.saved`,f.service);assert.equal(f.r.verify(f.v,'one').state,'verified');assert.equal(f.counts().writes,1);
 });
 test('known draft transition binds ID, destination and unchanged asset; retained due time is not queued',t=>{
